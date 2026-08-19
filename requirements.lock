@@ -1,0 +1,7 @@
+# Frozen from the existing NULLXES workstation environment. Do not pip-install
+# from this file unless the operator explicitly authorizes a download.
+numpy==2.2.6
+pyyaml==6.0.3
+pydantic==2.12.4
+torch==2.3.1+cpu
+pytest==9.0.2

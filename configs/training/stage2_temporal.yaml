@@ -1,0 +1,32 @@
+stage: 2
+name: temporal_dynamics
+architecture: configs/architecture/cpu_dev.yaml
+simulation: configs/simulation/milestone1.yaml
+
+seed: 13
+steps: 1000
+batch_size: 16
+sequence_length: 24
+learning_rate: 0.0003
+weight_decay: 0.0001
+grad_clip: 1.0
+log_every: 25
+eval_every: 100
+checkpoint_every: 200
+
+precision: float32
+device: cpu
+
+lambdas:
+  state: 0.6
+  temporal: 1.0
+  future: 0.6
+  uncertainty: 0.3
+  causal: 0.3
+  memory: 0.2
+  action: 0.4
+  representation: 0.05
+
+regularizer:
+  isotropic_weight: 0.05
+  counterfactual_margin: 0.35

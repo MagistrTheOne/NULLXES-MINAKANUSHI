@@ -1,0 +1,34 @@
+name: milestone1
+dt: 0.1
+arena: [0.0, 10.0, 0.0, 10.0]
+agent_start: [1.0, 1.0]
+home: [1.0, 1.0]
+sensor_range: 3.5
+sensor_noise_std: 0.08
+occlusion: true
+max_speed: 1.2
+n_movers: 3
+n_obstacles: 2
+n_targets: 2
+
+restricted_zones:
+  - [7.0, 7.0, 9.5, 9.5]
+
+movers:
+  - {id: 11, xy: [4.0, 2.0], vel: [0.6, 0.2]}
+  - {id: 12, xy: [6.0, 6.0], vel: [-0.4, 0.5]}
+  - {id: 13, xy: [2.5, 7.0], vel: [0.3, -0.4]}
+
+obstacles:
+  - {id: 21, xy: [5.0, 5.0], size: [1.2, 1.2]}
+  - {id: 22, xy: [3.0, 3.5], size: [0.8, 1.6]}
+
+targets:
+  - {id: 31, xy: [8.0, 2.0]}
+  - {id: 32, xy: [2.0, 8.0]}
+
+hard_constraints:
+  - stay_in_arena
+  - no_enter_restricted_zone
+  - no_collide_obstacle
+  - max_speed

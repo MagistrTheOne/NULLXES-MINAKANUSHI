@@ -1,0 +1,40 @@
+identity:
+  architecture: MINAKANUSHI
+  organization: NULLXES
+  system_class: adaptive_situational_intelligence
+  architecture_generation: 1
+  native_runtime: nullxes
+  architecture_version: "0.1"
+
+# Intermediate GPU training profile. Not a different architecture family.
+latent_dim: 256
+state_dim: 256
+memory_dim: 256
+world_slots: 64
+memory_slots: 128
+core_depth: 6
+uncertainty_channels: 8
+dropout: 0.0
+
+npf:
+  num_frequencies: 24
+  max_sources: 48
+  time_scale_seconds: 1.0
+
+cognition:
+  budget: 3
+  convergence_threshold: 0.03
+
+persistence:
+  steps: 8
+  retirement_uncertainty: 0.95
+
+prediction_horizons:
+  immediate: 1
+  short: 4
+  medium: 8
+
+dt: 0.1
+max_sources: 48
+max_observations: 48
+future_branches: 3

@@ -1,0 +1,6 @@
+device: cpu
+seed: 7
+deterministic: true
+log_level: INFO
+nan_guard: true
+latency_telemetry: true
