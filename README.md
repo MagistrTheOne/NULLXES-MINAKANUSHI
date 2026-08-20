@@ -96,6 +96,8 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/WORLD_STATE.md`
 - `docs/MEMORY.md`
 - `docs/TRAINING.md`
+- `docs/TRAINING_PLAN.md` — Maga GPU order ($30 now, November later)
+- `docs/GPU_BRINGUP_6000BW.md` — Stage A report (fill on pod)
 - `docs/CONSTRAINTS.md`
 - `docs/GATE_03_PRE_WORLD_MODEL.md` — approved lock: belief target, SelfModel
   as passport not network, authority gates action not cognition
@@ -107,5 +109,5 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/GATE_08_5_DATASET.md` — Dataset Reality Check (not Gate 09)
 - `docs/GATE_09_RUNTIME.md` — Autonomous Runtime (`cycle()`, RuntimeState)
 - `docs/DATASET_V1.md` — SyntheticWorld dataset contract
-- `docs/RUNPOD.md` — GPU pipeline order (not started)
+- `docs/RUNPOD.md` — RTX 6000 BW Stage A (`gpu_train_v01`)
 - `docs/PRETRAINING_GATE_01.md`

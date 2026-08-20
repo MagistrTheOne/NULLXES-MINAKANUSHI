@@ -40,9 +40,9 @@ runtime.
 
 Gate 03A (belief revision) and Gate 05 (Belief Engine) are implemented on
 `cpu_dev`. Do not redefine the world model as `image → next image` or
-`state → future_xy`. Do not start `gpu_train_v01` / `research_v01`.
-Organism order after 05: Memory as Experience, then Curiosity/Focus, then
-the action-conditional world model. See `docs/ARCHITECTURE.md`.
+`state → future_xy`. GPU order: `docs/TRAINING_PLAN.md`. Stage A is
+`gpu_train_v01` on RTX PRO 6000 Blackwell; `research_v01` is not this
+budget. Loss decrease is not acceptance.
 
 Later stages (memory stress, OOD uncertainty, strategy ranking, adversarial
 constraints, closed-loop, physical integration) are specified but not yet
