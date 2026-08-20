@@ -40,6 +40,41 @@ GATE03_SCENARIOS: tuple[str, ...] = (
     "delayed",
 )
 
+# Training mix. GATE03 cases are the textbook for "new evidence beats old hypothesis",
+# not OOD leftovers. Tracking scenarios stay so false-revision has a negative class.
+TRAIN_CURRICULUM: tuple[str, ...] = (
+    "hidden_correction",
+    "conflict",
+    "reacquisition",
+    "gone_forever",
+    "const_velocity",
+    "occlusion",
+    "noisy",
+    "accelerate",
+)
+
+# Observation index of the revision event. Trainer must train this frame, not idx=3.
+CORRECTION_FRAME: dict[str, int] = {
+    "hidden_correction": 6,
+    "reacquisition": 6,
+    "conflict": 4,
+    "gone_forever": 3,
+}
+
+
+def training_frame(scenario: str, length: int) -> int:
+    """Select the transition that carries the cognitive event.
+
+    Returns idx such that observations[idx] → observations[idx+1] is legal.
+    For correction scenarios that is the frame where evidence returns or conflicts.
+    """
+    if length < 2:
+        raise ValueError("episode too short to train a transition")
+    named = CORRECTION_FRAME.get(scenario)
+    if named is None:
+        named = max(1, min(length // 2, length - 2))
+    return int(max(0, min(named, length - 2)))
+
 
 @dataclass
 class FrameTruth:
@@ -107,23 +142,24 @@ def generate_episode(
     scenario: str | None = None,
 ) -> Episode:
     name = scenario or SCENARIOS[episode_index % len(SCENARIOS)]
+    physics = "hidden_correction" if name == "reacquisition" else name
     local_seed = int(seed) * 1_000_003 + int(episode_index) * 9176
     world = SyntheticWorld(config, seed=local_seed)
     rng = np.random.default_rng(local_seed)
 
-    if name == "accelerate":
+    if physics == "accelerate":
         world.movers[0].accel = np.array([0.4, 0.0], dtype=np.float64)
         world.movers[0].vel = world.movers[0].vel * 0.2
-    if name == "turn":
+    if physics == "turn":
         world.movers[0].vel = np.array([0.6, 0.0])
-    if name == "hidden_correction":
+    if physics == "hidden_correction":
         world.movers[0].xy = world.agent.xy + np.array([1.4, 0.0])
         world.movers[0].vel = np.array([-0.8, 0.0])
         world.hidden_ids = set()
-    if name == "conflict":
+    if physics == "conflict":
         world.movers[0].xy = world.agent.xy + np.array([1.2, 0.0])
         world.movers[0].vel = np.zeros(2)
-    if name == "gone_forever":
+    if physics == "gone_forever":
         world.movers[0].xy = world.agent.xy + np.array([1.3, 0.0])
 
     frames_obs: list[Observation] = []
@@ -131,11 +167,11 @@ def generate_episode(
     delay = 0.15 if name == "delayed" else 0.0
 
     for t in range(length):
-        if name == "accelerate":
+        if physics == "accelerate":
             pass
-        if name == "turn" and t == length // 2:
+        if physics == "turn" and t == length // 2:
             world.movers[0].vel = np.array([0.0, 0.7])
-        if name == "hidden_correction":
+        if physics == "hidden_correction":
             if 1 <= t <= 5:
                 world.hidden_ids.add(world.movers[0].body_id)
             elif t == 6:
@@ -144,13 +180,13 @@ def generate_episode(
                 world.movers[0].vel = np.zeros(2)
             else:
                 world.hidden_ids.discard(world.movers[0].body_id)
-        if name == "conflict":
+        if physics == "conflict":
             if t < 4:
                 world.movers[0].xy = world.agent.xy + np.array([1.0, 0.0])
             else:
                 world.movers[0].xy = world.agent.xy + np.array([3.0, 0.0])
                 world.movers[0].vel = np.zeros(2)
-        if name == "gone_forever" and t >= 3:
+        if physics == "gone_forever" and t >= 3:
             world.removed_ids.add(world.movers[0].body_id)
             world.hidden_ids.add(world.movers[0].body_id)
         if name == "agent_move":
@@ -260,6 +296,12 @@ def generate_overfit_set(config: SimulationConfig, *, seed: int, n_episodes: int
     if n_episodes < 8 or n_episodes > 32:
         raise ValueError("overfit set must be 8–32 episodes")
     return [
-        generate_episode(config, seed=seed, episode_index=i, length=length)
+        generate_episode(
+            config,
+            seed=seed,
+            episode_index=i,
+            length=length,
+            scenario=TRAIN_CURRICULUM[i % len(TRAIN_CURRICULUM)],
+        )
         for i in range(n_episodes)
     ]

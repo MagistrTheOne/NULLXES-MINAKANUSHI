@@ -26,6 +26,11 @@ class MetricBundle:
     correction_latency: float = -1.0
     false_persistence_steps: float = 0.0
     evidence_dominance: float = 0.0
+    revision_detected: float = 0.0
+    revision_direction_accuracy: float = 0.0
+    revision_magnitude_error: float = 0.0
+    revision_latency: float = -1.0
+    false_revision_rate: float = 0.0
 
 
 def masked_mse(pred: Tensor, true: Tensor, mask: Tensor) -> Tensor:
@@ -196,6 +201,13 @@ def assemble_bundle(
     constraint_violations: int,
     closed_loop_success: float,
     coverage: float,
+    before_xy: Tensor | None = None,
+    after_xy: Tensor | None = None,
+    evidence_xy: Tensor | None = None,
+    should_revise: Tensor | None = None,
+    has_evidence: Tensor | None = None,
+    occupied_before: Tensor | None = None,
+    entity_id: Tensor | None = None,
 ) -> MetricBundle:
     pos = masked_mse(pred_xy, true_xy, occupied)
     vel = masked_mse(pred_vel, true_vel, occupied)
@@ -204,6 +216,34 @@ def assemble_bundle(
     err = torch.linalg.vector_norm(position_error, dim=-1)
     cal = (u_mean - err).abs()
     cal = (cal * occupied.to(cal.dtype)).sum() / occupied.to(cal.dtype).sum().clamp_min(1.0)
+    rev = {
+        "revision_detected": 0.0,
+        "revision_direction_accuracy": 0.0,
+        "revision_magnitude_error": 0.0,
+        "revision_latency": -1.0,
+        "false_revision_rate": 0.0,
+        "belief_revision_accuracy": 0.0,
+    }
+    if (
+        before_xy is not None
+        and after_xy is not None
+        and evidence_xy is not None
+        and should_revise is not None
+        and has_evidence is not None
+        and occupied_before is not None
+        and entity_id is not None
+    ):
+        from minakanushi.training.revision import revision_metrics
+
+        rev = revision_metrics(
+            before_xy=before_xy,
+            after_xy=after_xy,
+            evidence_xy=evidence_xy,
+            should_revise=should_revise,
+            has_evidence=has_evidence,
+            occupied_before=occupied_before,
+            entity_id=entity_id,
+        )
     return MetricBundle(
         world_state_position_error=float(pos.detach()),
         world_state_velocity_error=float(vel.detach()),
@@ -217,5 +257,12 @@ def assemble_bundle(
         memory_effect_delta=float(memory_delta),
         constraint_violation_count=int(constraint_violations),
         closed_loop_success_rate=float(closed_loop_success),
+        belief_revision_accuracy=float(rev["belief_revision_accuracy"]),
+        correction_latency=float(rev["revision_latency"]),
+        revision_detected=float(rev["revision_detected"]),
+        revision_direction_accuracy=float(rev["revision_direction_accuracy"]),
+        revision_magnitude_error=float(rev["revision_magnitude_error"]),
+        revision_latency=float(rev["revision_latency"]),
+        false_revision_rate=float(rev["false_revision_rate"]),
     )
 

@@ -7,12 +7,13 @@ MINAKANUSHI is not trained with a next-token objective.
 ```text
 L = λs L_state + λt L_temporal + λf L_future + λu L_uncertainty
   + λc L_causal + λm L_memory + λa L_action + λr L_representation
-  + λb L_belief
+  + λb L_belief + λv L_revision
 ```
 
 | Term | Property |
 |---|---|
 | L_belief | Gaussian NLL of GT xy under `(mean, std)` plus existence vs was-present |
+| L_revision | detection + direction + calibration of belief update vs new evidence; DWC residual is in the path |
 | L_state | auxiliary physical grounding (xy readout vs simulator); not the world-model definition |
 | L_temporal | next-step transition |
 | L_future | multi-horizon trajectory |
@@ -22,8 +23,13 @@ L = λs L_state + λt L_temporal + λf L_future + λu L_uncertainty
 | L_action | counterfactual branch separation |
 | L_representation | isotropic occupied-latent regularizer |
 
-`λ_belief` is wired on Stage 0 / `cpu_dev` training YAMLs only. Other stages
-default to 0 until those gates own the term.
+`λ_belief` and `λ_revision` are wired on Stage 0 / `cpu_dev` and Stage A
+`gpu_train_v01` training YAMLs. Other stages default to 0 until those gates
+own the term. `L_revision` is not `loss += correction_count`. It is the
+textbook for "new evidence beats the old hypothesis": detection, direction
+toward evidence, and calibration. GATE03 cases
+(`hidden_correction`, `conflict`, `reacquisition`, `gone_forever`) are in
+the training curriculum, not only OOD.
 
 August 2026 world-model papers (PhyLatent, PSG-JEPA, LeWM) motivate the
 physical-grounding, multi-horizon, and counterfactual terms. They do not
@@ -59,4 +65,8 @@ Load fails on latent_dim mismatch instead of silent reshape.
 ## Metrics that count
 
 Loss decrease is not success. Report trajectory error, persistence occupancy
-under occlusion, counterfactual separation, and hard-constraint reject rate.
+under occlusion, counterfactual separation, hard-constraint reject rate, and
+the split revision metrics (`revision_detected`,
+`revision_direction_accuracy`, `revision_magnitude_error`,
+`revision_latency`, `false_revision_rate`). `belief_revision_accuracy` is
+the direction score, not a silent zero.

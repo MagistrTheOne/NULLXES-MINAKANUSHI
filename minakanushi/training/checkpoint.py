@@ -137,7 +137,11 @@ def load_mina(
         }.items():
             if int(manifest[key]) != int(expected):
                 raise ValueError(f"checkpoint {key}={manifest[key]} vs system {expected}")
-        payload = torch.load(io.BytesIO(zf.read(WEIGHTS_NAME)), map_location="cpu")
+        payload = torch.load(
+            io.BytesIO(zf.read(WEIGHTS_NAME)),
+            map_location="cpu",
+            weights_only=False,
+        )
     incompatible = system.load_state_dict(payload["system"], strict=True)
     if incompatible.missing_keys or incompatible.unexpected_keys:
         raise ValueError(f"strict load failed: {incompatible}")

@@ -29,6 +29,7 @@ lambdas:
   action: 0.4
   representation: 0.05
   belief: 0.5
+  revision: 1.0
 
 regularizer:
   isotropic_weight: 0.05

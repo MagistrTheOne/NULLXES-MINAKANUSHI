@@ -1,23 +1,23 @@
 stage: 0
-name: stage0_generalization
-architecture: configs/architecture/cpu_dev.yaml
+name: stage_a_gpu_train_v01
+architecture: configs/architecture/gpu_train_v01.yaml
 simulation: configs/simulation/milestone1.yaml
 dataset_name: stage0_synthetic
-n_overfit_episodes: 0
+n_overfit_episodes: 16
 
-seed: 101
-steps: 0
+seed: 7
+steps: 200
 batch_size: 1
 sequence_length: 12
-learning_rate: 0.0
-weight_decay: 0.0
+learning_rate: 0.001
+weight_decay: 0.0001
 grad_clip: 1.0
-log_every: 1
-eval_every: 1
-checkpoint_every: 100000
+log_every: 10
+eval_every: 50
+checkpoint_every: 100
 
-precision: float32
-device: cpu
+precision: bf16
+device: cuda
 
 lambdas:
   state: 1.0

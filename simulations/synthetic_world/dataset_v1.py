@@ -16,7 +16,16 @@ from simulations.synthetic_world.replay import canonical_json
 SPLITS: tuple[str, ...] = ("train", "validation", "composition", "ood", "counterfactual")
 
 SPLIT_SCENARIOS: dict[str, tuple[str, ...]] = {
-    "train": ("const_velocity", "accelerate", "turn", "agent_move"),
+    "train": (
+        "const_velocity",
+        "accelerate",
+        "turn",
+        "agent_move",
+        "hidden_correction",
+        "conflict",
+        "reacquisition",
+        "gone_forever",
+    ),
     "validation": ("occlusion", "noisy", "obstacles"),
     "composition": ("accelerate", "turn", "occlusion", "agent_move"),
     "ood": ("gone_forever", "conflict", "hidden_correction"),

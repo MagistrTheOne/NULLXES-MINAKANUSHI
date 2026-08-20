@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
@@ -24,7 +25,8 @@ from minakanushi.training.metrics import assemble_bundle, memory_effect_delta, p
 from minakanushi.training.objectives import compute_objectives
 from minakanushi.utils.seed import seed_everything
 from minakanushi.utils.tensors import assert_finite, resolve_device, resolve_dtype
-from simulations.synthetic_world.dataset import generate_episode
+from minakanushi.training.revision import evidence_for_slots, should_revise_mask
+from simulations.synthetic_world.dataset import TRAIN_CURRICULUM, generate_episode, training_frame
 
 
 @dataclass
@@ -66,6 +68,12 @@ class UnrollPacket:
     obs_timestamp: float
     obs_agent_xy: tuple[float, float]
     obs_agent_vel: tuple[float, float]
+    before_xy: Tensor
+    evidence_xy: Tensor
+    should_revise: Tensor
+    has_evidence: Tensor
+    occupied_before: Tensor
+    n_constructor_corrections: int
 
 
 def _align(pred_ids: Tensor, pred_occ: Tensor, true_ids: Tensor, true_xy: Tensor, true_vel: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -115,6 +123,10 @@ class Trainer:
         seed_everything(config.training.seed)
         self.device = resolve_device(config.training.device)
         self.dtype = resolve_dtype(config.training.precision)
+        # Weights stay fp32. AMP downcasts CUDA matmuls. Feeding bf16 tensors
+        # into fp32 Linear raises: mat1 BFloat16 / mat2 Float.
+        self._amp_enabled = self.device.type == "cuda" and self.dtype in (torch.bfloat16, torch.float16)
+        self.compute_dtype = torch.float32 if self._amp_enabled else self.dtype
         self.system = MinakanushiSystem(config.architecture).to(self.device)
         self.constructor = StateConstructor(config.architecture)
         self.opt = torch.optim.AdamW(
@@ -127,8 +139,13 @@ class Trainer:
         self._last_forward_s = 0.0
         self._last_backward_s = 0.0
 
+    def _amp(self):
+        if self._amp_enabled:
+            return torch.autocast(device_type="cuda", dtype=self.dtype)
+        return nullcontext()
+
     def _encode(self, obs, episode_pos: float) -> MinaUnitBatch:
-        units = self.system.perception.encode(obs, device=self.device, dtype=self.dtype)
+        units = self.system.perception.encode(obs, device=self.device, dtype=self.compute_dtype)
         now = obs.arrival_time if obs.arrival_time is not None else obs.timestamp
         return pack_units(
             units,
@@ -138,7 +155,7 @@ class Trainer:
             episode_position=episode_pos,
             now=now,
             device=self.device,
-            dtype=self.dtype,
+            dtype=self.compute_dtype,
         )
 
     def _core_step(self, packed, world, live_writes):
@@ -147,41 +164,59 @@ class Trainer:
         fused = packed.semantic_embedding + pos.embedding
         constructed = self.constructor.apply(packed, world, fused, memory_hints=hints)
         _, core = self.system.observe_to_core(packed, constructed, hints)
-        return pos, hints, core
+        return pos, hints, constructed, core
 
     def unroll(self, step: int) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
         ep_idx = (step - 1) % max(train.n_overfit_episodes, 1)
+        scenario_name = TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
         episode = generate_episode(
             self.config.simulation,
             seed=train.seed,
             episode_index=ep_idx,
             length=train.sequence_length,
             horizon=arch.prediction_horizons.short,
+            scenario=scenario_name,
         )
-        idx = min(3, len(episode.observations) - 3)
+        idx = training_frame(episode.scenario, len(episode.observations))
         obs = episode.observations[idx]
         obs_n = episode.observations[idx + 1]
         truth = episode.truth[idx]
         truth_n = episode.truth[idx + 1]
 
-        world = empty_world_state(arch, 1, device=self.device, dtype=self.dtype)
-        world.entity_xy[0, 0] = torch.tensor(self.config.simulation.agent_start, device=self.device, dtype=self.dtype)
+        world = empty_world_state(arch, 1, device=self.device, dtype=self.compute_dtype)
+        world.entity_xy[0, 0] = torch.tensor(
+            self.config.simulation.agent_start, device=self.device, dtype=self.compute_dtype
+        )
+        writes = None
+        if idx > 0:
+            with torch.no_grad():
+                for t in range(idx):
+                    packed_t = self._encode(episode.observations[t], float(t))
+                    _, _, _, core_t = self._core_step(packed_t, world, live_writes=writes)
+                    world = core_t.world_state
+                    writes = core_t.memory_write_candidates
 
+        before_xy = world.entity_xy.detach().clone()
+        occupied_before = world.occupied.clone()
         packed = self._encode(obs, float(idx))
-        pos, hints, core = self._core_step(packed, world, live_writes=None)
+        evidence_xy, evidence_vel, has_evidence = evidence_for_slots(world, packed)
+        should_revise = should_revise_mask(
+            before_xy, evidence_xy, has_evidence, occupied_before, world.entity_id
+        )
+        pos, hints, constructed, core = self._core_step(packed, world, live_writes=writes)
         writes = core.memory_write_candidates
         pred = core.world_state
 
         packed_n = self._encode(obs_n, float(idx + 1))
-        _, _, core_n = self._core_step(packed_n, pred, live_writes=writes)
+        _, _, _, core_n = self._core_step(packed_n, pred, live_writes=writes)
         pred_n = core_n.world_state
 
         max_e = arch.world_slots
-        true_ids, true_xy, true_vel, _ = _truth_tensors(truth, max_e, self.device, self.dtype)
+        true_ids, true_xy, true_vel, _ = _truth_tensors(truth, max_e, self.device, self.compute_dtype)
         aligned_xy, aligned_vel, aligned_occ = _align(pred.entity_id, pred.occupied, true_ids, true_xy, true_vel)
-        true_ids_n, true_next, true_next_vel, _ = _truth_tensors(truth_n, max_e, self.device, self.dtype)
+        true_ids_n, true_next, true_next_vel, _ = _truth_tensors(truth_n, max_e, self.device, self.compute_dtype)
         aligned_next, aligned_next_vel, aligned_occ_n = _align(
             pred_n.entity_id, pred_n.occupied, true_ids_n, true_next, true_next_vel
         )
@@ -236,6 +271,15 @@ class Trainer:
             existence=pred.existence,
             true_present=aligned_occ,
             hypothesized=pred.occupied,
+            before_xy=before_xy,
+            after_xy=pred.entity_xy,
+            after_vel=pred.entity_vel,
+            evidence_xy=evidence_xy,
+            evidence_vel=evidence_vel,
+            should_revise=should_revise,
+            has_evidence=has_evidence,
+            occupied_before=occupied_before,
+            entity_id=world.entity_id,
         )
         assert_finite("loss.total", breakdown.total)
         return UnrollPacket(
@@ -266,6 +310,12 @@ class Trainer:
             obs_timestamp=float(obs.timestamp),
             obs_agent_xy=tuple(float(x) for x in obs.agent_xy),
             obs_agent_vel=tuple(float(x) for x in obs.agent_vel),
+            before_xy=before_xy,
+            evidence_xy=evidence_xy,
+            should_revise=should_revise,
+            has_evidence=has_evidence,
+            occupied_before=occupied_before,
+            n_constructor_corrections=len(constructed.corrections),
         )
 
     def _metrics(self, pkt: UnrollPacket) -> dict[str, float]:
@@ -287,7 +337,8 @@ class Trainer:
                 reacq_hit += 1
         zeros = torch.zeros_like(pkt.writes)
         with torch.no_grad():
-            _, _, core_off = self._core_step(pkt.packed_n, pkt.pred, live_writes=zeros)
+            with self._amp():
+                _, _, _, core_off = self._core_step(pkt.packed_n, pkt.pred, live_writes=zeros)
         mem_slots = pkt.mem_mask if bool(pkt.mem_mask.any()) else pkt.pred_n.occupied
         mem_delta = float(
             memory_effect_delta(
@@ -331,12 +382,20 @@ class Trainer:
             constraint_violations=violations,
             closed_loop_success=loop_ok,
             coverage=coverage,
+            before_xy=pkt.before_xy,
+            after_xy=pred.entity_xy,
+            evidence_xy=pkt.evidence_xy,
+            should_revise=pkt.should_revise,
+            has_evidence=pkt.has_evidence,
+            occupied_before=pkt.occupied_before,
+            entity_id=pred.entity_id,
         )
         return asdict(bundle)
 
     def step_once(self, step: int) -> TrainLog:
         t0 = perf_counter()
-        pkt = self.unroll(step)
+        with self._amp():
+            pkt = self.unroll(step)
         self._last_forward_s = perf_counter() - t0
         t1 = perf_counter()
         self.opt.zero_grad(set_to_none=True)
@@ -412,7 +471,8 @@ class Trainer:
         # Frozen inference snapshot from a deterministic episode for reload comparison.
         with torch.no_grad():
             self.system.eval()
-            pkt = self.unroll(1)
+            with self._amp():
+                pkt = self.unroll(1)
             torch.save(
                 {
                     "seed": train.seed,

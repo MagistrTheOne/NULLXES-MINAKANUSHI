@@ -187,12 +187,12 @@ def memory_occlusion() -> dict:
 
     world = empty_world_state(arch, 1, device=trainer.device, dtype=trainer.dtype)
     packed = trainer._encode(episode.observations[idx], float(idx))
-    pos, hints, core = trainer._core_step(packed, world, live_writes=None)
+    pos, hints, constructed, core = trainer._core_step(packed, world, live_writes=None)
     writes = core.memory_write_candidates
     packed_n = trainer._encode(episode.observations[idx + 1], float(idx + 1))
-    _, _, on = trainer._core_step(packed_n, core.world_state, live_writes=writes)
+    _, _, _, on = trainer._core_step(packed_n, core.world_state, live_writes=writes)
     zeros = torch.zeros_like(writes)
-    _, _, off = trainer._core_step(packed_n, core.world_state, live_writes=zeros)
+    _, _, _, off = trainer._core_step(packed_n, core.world_state, live_writes=zeros)
     occ = on.world_state.occupied
     delta = float(((on.world_state.entity_xy - off.world_state.entity_xy).pow(2) * occ.unsqueeze(-1).to(on.world_state.entity_xy.dtype)).mean())
     persist_on = int(on.world_state.occupied.sum())
@@ -227,7 +227,7 @@ def uncertainty_order() -> dict:
 
             world = empty_world_state(trainer.config.architecture, 1, device=trainer.device, dtype=trainer.dtype)
             packed = trainer._encode(episode.observations[3], 3.0)
-            _, _, core = trainer._core_step(packed, world, live_writes=None)
+            _, _, _, core = trainer._core_step(packed, world, live_writes=None)
             u = core.world_state.uncertainty[0, core.world_state.occupied[0]].mean()
             pkt_means.append(float(u))
         means[name] = sum(pkt_means) / len(pkt_means)

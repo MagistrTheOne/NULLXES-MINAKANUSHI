@@ -6,6 +6,7 @@ not as architectural identity:
 
 - physical state grounding (L_state) — auxiliary, not the belief definition
 - belief NLL + existence (L_belief)
+- belief revision vs evidence (L_revision): detection, direction, calibration
 - multi-horizon future alignment (L_future)
 - counterfactual branch separation (L_action)
 - isotropic latent regularizer to prevent collapse (L_representation)
@@ -20,6 +21,7 @@ from torch import Tensor
 
 from minakanushi.architecture.config import TrainingConfig
 from minakanushi.state.correction import MISSING_CHANNEL, STATE_CHANNEL
+from minakanushi.training.revision import revision_losses
 from minakanushi.uncertainty.calibration import gaussian_nll
 
 
@@ -85,6 +87,15 @@ def compute_objectives(
     existence: Tensor | None = None,
     true_present: Tensor | None = None,
     hypothesized: Tensor | None = None,
+    before_xy: Tensor | None = None,
+    after_xy: Tensor | None = None,
+    after_vel: Tensor | None = None,
+    evidence_xy: Tensor | None = None,
+    evidence_vel: Tensor | None = None,
+    should_revise: Tensor | None = None,
+    has_evidence: Tensor | None = None,
+    occupied_before: Tensor | None = None,
+    entity_id: Tensor | None = None,
 ) -> ObjectiveBreakdown:
     """Shapes:
     pred_xy/true_xy:     [B, N, 2]
@@ -127,6 +138,37 @@ def compute_objectives(
         exist_mask = hypothesized if hypothesized is not None else occupied
         l_exist = existence_bce(existence, true_present, exist_mask)
     l_belief = l_belief_nll + l_exist
+    zero = pred_xy.new_zeros(())
+    rev_parts: dict[str, Tensor] = {
+        "revision_detection": zero,
+        "revision_direction": zero,
+        "revision_calibration": zero,
+        "revision_false": zero,
+    }
+    if (
+        before_xy is None
+        or evidence_xy is None
+        or should_revise is None
+        or has_evidence is None
+        or occupied_before is None
+        or entity_id is None
+    ):
+        l_revision = zero
+    else:
+        after = after_xy if after_xy is not None else pred_xy
+        vel = after_vel if after_vel is not None else torch.zeros_like(after)
+        ev_vel = evidence_vel if evidence_vel is not None else torch.zeros_like(after)
+        l_revision, rev_parts = revision_losses(
+            before_xy=before_xy,
+            after_xy=after,
+            after_vel=vel,
+            evidence_xy=evidence_xy,
+            evidence_vel=ev_vel,
+            should_revise=should_revise,
+            has_evidence=has_evidence,
+            occupied_before=occupied_before,
+            entity_id=entity_id,
+        )
     lambdas = training.lambdas
     total = (
         lambdas.state * l_state
@@ -138,6 +180,7 @@ def compute_objectives(
         + lambdas.action * l_action
         + lambdas.representation * l_repr
         + lambdas.belief * l_belief
+        + lambdas.revision * l_revision
     )
     return ObjectiveBreakdown(
         total=total,
@@ -151,5 +194,7 @@ def compute_objectives(
             "action": l_action,
             "representation": l_repr,
             "belief": l_belief,
+            "revision": l_revision,
+            **rev_parts,
         },
     )

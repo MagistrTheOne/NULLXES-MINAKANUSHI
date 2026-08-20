@@ -56,3 +56,8 @@ posterior tensors are filled by a closed-loop recorder, not by this writer.
 `occlusion` events are in-range unseen bodies (hidden or line-of-sight).
 Bodies beyond `sensor_range` are `out_of_range`, not occlusion.
 `gone_forever` removes the entity from ground truth and emits `disappearance`.
+
+Train split includes GATE03 revision cases (`hidden_correction`, `conflict`,
+`reacquisition`, `gone_forever`) as curriculum. The same names remain in
+`ood` for Gate 08.5C. They are not an out-of-distribution surprise; they are
+the textbook for "new evidence beats the old hypothesis".
