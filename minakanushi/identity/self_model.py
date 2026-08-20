@@ -15,7 +15,7 @@ from minakanushi.identity.constants import (
     SHORT_NAME,
     SYSTEM_CLASS,
 )
-from minakanushi.identity.experience import ExperienceLog, ExperienceRecord
+from minakanushi.identity.experience import ExperienceLog
 from minakanushi.state.correction import CorrectionEvent
 
 
@@ -91,18 +91,7 @@ class SelfModel:
     def tick(self, dt: float, uncertainty: float, corrections: tuple[CorrectionEvent, ...]) -> None:
         self.instance.runtime_age += float(dt)
         self.runtime.uncertainty_state = float(uncertainty)
-        for event in corrections:
-            self.experience.append(
-                ExperienceRecord(
-                    event_time=self.instance.creation_time + self.instance.runtime_age,
-                    situation="belief_revision",
-                    belief_before=str(event.old_xy),
-                    action="revise",
-                    result=str(event.new_xy),
-                    belief_after=str(event.new_xy),
-                    correction_required=True,
-                )
-            )
+        _ = corrections
 
     def to_dict(self) -> dict:
         return {

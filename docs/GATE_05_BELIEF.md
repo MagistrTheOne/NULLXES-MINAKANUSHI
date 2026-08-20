@@ -66,5 +66,4 @@ vs “was actually present.” `L_state` stays as auxiliary grounding.
 11 Language interface
 ```
 
-Do not implement those here. Leave Gate 04 `FocusState` / `ExperienceRecord`
-stubs for 07/06.
+Leave Gate 04 `FocusState` stubs for Gate 07. Experience is Gate 06.

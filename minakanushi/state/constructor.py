@@ -88,6 +88,7 @@ class StateConstructor:
         previous: WorldState,
         positioned: Tensor,
         memory_hints: Tensor | None = None,
+        experience_boost: tuple[Tensor, Tensor] | None = None,
     ) -> WorldState:
         """positioned: [B, N_obs, D]  observation latents after NPF + semantics."""
         units.validate()
@@ -227,6 +228,12 @@ class StateConstructor:
         inflate = extra.unsqueeze(-1) * COAST_STD_GAIN
         xy_std = torch.where(persist.unsqueeze(-1), (xy_std + inflate).clamp_min(BELIEF_STD_MIN), xy_std)
         vel_std = torch.where(persist.unsqueeze(-1), (vel_std + inflate).clamp_min(BELIEF_STD_MIN), vel_std)
+        if experience_boost is not None:
+            xy_b, vel_b = experience_boost
+            assert_shape("experience_xy_boost", xy_b, tuple(xy_std.shape))
+            assert_shape("experience_vel_boost", vel_b, tuple(vel_std.shape))
+            xy_std = torch.where(persist.unsqueeze(-1), (xy_std + xy_b).clamp_min(BELIEF_STD_MIN), xy_std)
+            vel_std = torch.where(persist.unsqueeze(-1), (vel_std + vel_b).clamp_min(BELIEF_STD_MIN), vel_std)
         coast = persist.unsqueeze(-1).to(xy.dtype)
         xy = xy + vel * dt * coast
         entity_id = torch.where(occupied, entity_id, torch.zeros_like(entity_id))

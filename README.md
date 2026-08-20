@@ -90,4 +90,5 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
   as passport not network, authority gates action not cognition
 - `docs/GATE_04_IDENTITY.md` — SelfModel, Authority, Persona (not a prompt)
 - `docs/GATE_05_BELIEF.md` — Belief Engine (mean + std + existence)
+- `docs/GATE_06_EXPERIENCE.md` — memory as experience (not RAG)
 - `docs/PRETRAINING_GATE_01.md`

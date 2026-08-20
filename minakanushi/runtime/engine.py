@@ -21,10 +21,11 @@ from minakanushi.constraints.kernel import MinakanushiConstraintKernel
 from minakanushi.future.engine import group_by_strategy
 from minakanushi.identity.authority import AuthorityModel, AuthorityMode, candidate_from_intent
 from minakanushi.identity.constants import SHORT_NAME
-from minakanushi.identity.experience import ExperienceRecord
+from minakanushi.identity.experience import ExperienceLog
 from minakanushi.identity.focus import focus_from_world
 from minakanushi.identity.persona import PersonaModel
 from minakanushi.identity.self_model import SelfModel
+from minakanushi.memory.experience import ExperienceEngine
 from minakanushi.perception.bridge import Observation
 from minakanushi.policy.action_policy import ActionPolicy
 from minakanushi.policy.intent import ActionIntent
@@ -60,6 +61,7 @@ class MinakanushiEngine:
         self.telemetry = TelemetryLogger(config.runtime.log_level)
         self.persona = PersonaModel()
         self.authority = AuthorityModel()
+        self.experience = ExperienceEngine()
 
     @property
     def future(self):
@@ -132,8 +134,12 @@ class MinakanushiEngine:
         )
         positioned = self.system.position_units(packed)
         fused = packed.semantic_embedding + positioned.embedding
+        exp_log = self_model.experience if self_model.experience is not None else ExperienceLog()
+        xy_boost, vel_boost = self.experience.std_boost(state.world, exp_log)
         hints = self.system.memory.hints(state.world)
-        constructed = self.constructor.apply(packed, state.world, fused, memory_hints=hints)
+        constructed = self.constructor.apply(
+            packed, state.world, fused, memory_hints=hints, experience_boost=(xy_boost, vel_boost)
+        )
         _, core = self.system.observe_to_core(packed, constructed, hints)
         world = core.world_state
         self.system.memory.write(world, core.memory_write_candidates)
@@ -159,17 +165,10 @@ class MinakanushiEngine:
         self_model.policy_enabled = authority.policy_enabled
         self_model.operator_connected = authority.operator_connected
         self_model.tick(arch.dt, sit.uncertainty, world.corrections)
-        self_model.experience.append(
-            ExperienceRecord(
-                event_time=float(observations.timestamp),
-                situation=f"entities={world.entity_count}",
-                belief_before=f"cycle={state.cycle_id}",
-                action=intent.objective,
-                result=intent.provenance,
-                belief_after=f"cycle={state.cycle_id + 1}",
-                correction_required=len(world.corrections) > 0,
-            )
-        )
+        for record in self.experience.record_cycle(
+            state.world, world, arch.dt, intent.objective, float(observations.timestamp)
+        ):
+            self_model.experience.append(record)
         focus = focus_from_world(world)
         telemetry = CycleTelemetry(
             cycle_id=state.cycle_id + 1,
@@ -193,6 +192,7 @@ class MinakanushiEngine:
                 "policy_enabled": authority.policy_enabled,
                 "short_name": SHORT_NAME,
                 "persona_bound": False,
+                "experience_count": len(self_model.experience.records),
             },
         )
         self.telemetry.emit(telemetry)
