@@ -50,15 +50,21 @@ Lock it before anyone trains at width.
 
 ## Roadmap (do not skip ahead)
 
-| Gate | Work | Not this gate |
-|---:|---|---|
-| 02 | Closed: loop, grads, checkpoint, runtime | — |
-| **03** | **Synthetic curriculum + generalization + adversarial reality check** | **No SelfModel network. No authority UI. No gpu_train_v01.** |
-| 04 | SelfModel + Authority + operator modes as structured state | No identity prompt. No identity head. |
-| 05 | World belief objectives (`L` on `B_t`, not xy-only) | No next-frame video model |
-| 06 | Memory / uncertainty validation under conflict | — |
-| 07 | Scaling test `gpu_train_v01` | No `research_v01` on CPU |
-| 08 | H100/H200 preparation | Only after 03–07 pass |
+Gates 02–04 in this lock remain valid. Maga’s organism order **replaces**
+the old 05–08 table. Canonical table: `docs/ARCHITECTURE.md`.
+
+```text
+02 train loop
+03A reality correction
+04 existence (Self/Authority)
+05 Belief Engine
+06 Memory as Experience
+07 Curiosity / Focus Engine
+08 Active World Model
+09 Autonomous Runtime
+10 Embodiment adapters
+11 Language interface
+```
 
 Identity sequence (not text):
 

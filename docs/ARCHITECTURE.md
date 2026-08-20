@@ -53,18 +53,29 @@ token attention and is not RoPE.
 
 ## Identity
 
-Checkpoint and config identity is `architecture=MINAKANUSHI`,
-`organization=NULLXES`, `native_runtime=nullxes`. No chat template.
-No “I AM MINAKANUSHI” language objective. Self-knowledge is a structured
-SelfModel (passport + embodiment + authority), not a network that classifies
-identity. See `docs/GATE_03_PRE_WORLD_MODEL.md`.
+Hierarchy (do not invert):
+
+```text
+NULLXES
+  → MINAKANUSHI   architecture
+    → MINA        short name
+      → instance  runtime / checkpoint
+```
+
+Checkpoint and config identity is `architecture=MINAKANUSHI` (short name
+`MINA`), `architecture_id=nullxes.minakanushi`, `organization=NULLXES`,
+`native_runtime=nullxes`. No chat template. No “I AM MINAKANUSHI” language
+objective. SelfModel is a structured passport; PersonaModel is presentation
+only. Persona / voice / face sit above cognition and do not drive belief.
+See `docs/GATE_04_IDENTITY.md`.
 
 ## Belief
 
 World update is `B_t = F(B_{t-1}, O_t, M_t, P_t, U_t)`. `B_t` is a
-probabilistic belief state, not a hidden embedding only. `latent_state` is
-the learned carrier; identity, kinematics, confidence, typed uncertainty,
-and persistence are part of the belief.
+probabilistic belief: position/velocity **mean + std**, existence
+probability, and prediction confidence. `latent_state` is the learned
+carrier, not the belief object. Occupied is slot allocation; existence is
+the soft “I think this is real.” See `docs/GATE_05_BELIEF.md`.
 
 ## Authority
 
@@ -75,12 +86,19 @@ select goes off (fail-closed SAFE_HOLD).
 
 ## Gates
 
-| Gate | Status |
-|---:|---|
-| 02 | closed (loop, grads, checkpoint, runtime) |
-| 03 | synthetic curriculum + generalization + adversarial reality — next |
-| 04 | SelfModel + Authority + operator modes (structured, not a net) |
-| 05 | world belief objectives |
-| 06 | memory / uncertainty validation |
-| 07 | `gpu_train_v01` scaling |
-| 08 | H100/H200 preparation |
+Organism order (Maga). Do not implement a later gate in an earlier PR.
+
+| Gate | Work | Status |
+|---:|---|---|
+| 02 | train loop | done |
+| 03A | reality correction | done |
+| 04 | existence (Self / Authority) | done |
+| 05 | Belief Engine | this gate |
+| 06 | Memory as Experience | not this PR |
+| 07 | Curiosity / Focus Engine | not this PR |
+| 08 | Active World Model (`Belief_t` + Action → `Belief_{t+1}`) | not this PR |
+| 09 | Autonomous Runtime | not this PR |
+| 10 | Embodiment adapters | not this PR |
+| 11 | Language interface | not this PR |
+
+Do not instantiate `research_v01`. Do not add vision, LLM, or extra deps.

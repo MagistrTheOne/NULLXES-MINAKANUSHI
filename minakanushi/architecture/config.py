@@ -115,6 +115,7 @@ class LossLambdaConfig:
     memory: float = 0.4
     action: float = 0.3
     representation: float = 0.05
+    belief: float = 0.0
 
 
 @dataclass(frozen=True)

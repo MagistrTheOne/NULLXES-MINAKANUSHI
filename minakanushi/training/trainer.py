@@ -232,6 +232,10 @@ class Trainer:
             latent=pred.latent_state,
             training=train,
             unobserved_mask=(pred.age_unobserved > 0) & pred.occupied,
+            xy_std=pred.xy_std,
+            existence=pred.existence,
+            true_present=aligned_occ,
+            hypothesized=pred.occupied,
         )
         assert_finite("loss.total", breakdown.total)
         return UnrollPacket(

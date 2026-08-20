@@ -7,14 +7,22 @@ from torch import Tensor
 
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.mina_unit import KIND_IDS, MinaUnitBatch
-from minakanushi.architecture.outputs import PositionState
 from minakanushi.state.correction import (
     CONFLICT_CHANNEL,
     NOISY_CHANNEL,
+    fuse,
     revise_slot,
 )
 from minakanushi.state.entity import AGENT_SLOT
-from minakanushi.state.world import WorldState
+from minakanushi.state.world import (
+    BELIEF_EXISTENCE_FLOOR,
+    BELIEF_STD_MIN,
+    COAST_STD_GAIN,
+    EXISTENCE_DECAY,
+    MEMORY_MEAN_GAIN,
+    PRED_CONF_DECAY,
+    WorldState,
+)
 from minakanushi.utils.tensors import assert_finite, assert_shape
 
 
@@ -36,6 +44,12 @@ def empty_world_state(
     kind = torch.zeros(batch_size, n, dtype=torch.long, device=device)
     kind[:, AGENT_SLOT] = KIND_IDS["agent"]
     uncertainty = torch.ones(batch_size, n, u, device=device, dtype=dtype) * 0.5
+    xy_std = torch.ones(batch_size, n, 2, device=device, dtype=dtype) * 0.1
+    vel_std = torch.ones(batch_size, n, 2, device=device, dtype=dtype) * 0.1
+    existence = torch.zeros(batch_size, n, device=device, dtype=dtype)
+    existence[:, AGENT_SLOT] = 1.0
+    pred_confidence = torch.zeros(batch_size, n, device=device, dtype=dtype)
+    pred_confidence[:, AGENT_SLOT] = 0.5
     return WorldState(
         timestamp=torch.full((batch_size,), timestamp, device=device, dtype=dtype),
         latent_state=torch.zeros(batch_size, n, d, device=device, dtype=dtype),
@@ -47,6 +61,10 @@ def empty_world_state(
         confidence=torch.zeros(batch_size, n, device=device, dtype=dtype),
         uncertainty=uncertainty,
         age_unobserved=torch.zeros(batch_size, n, device=device, dtype=dtype),
+        xy_std=xy_std,
+        vel_std=vel_std,
+        existence=existence,
+        pred_confidence=pred_confidence,
     )
 
 
@@ -56,6 +74,9 @@ class StateConstructor:
     Matching is by entity_id when present. Unobserved occupied slots persist
     until persistence.steps, then retire. This is architectural persistence,
     not a test-specific hardcode.
+
+    Belief update: Observation + previous belief + memory + kinematics.
+    Occupied is slot allocation. existence is P(this hypothesis is real).
     """
 
     def __init__(self, config: ArchitectureConfig) -> None:
@@ -78,6 +99,10 @@ class StateConstructor:
         latent = previous.latent_state
         xy = previous.entity_xy
         vel = previous.entity_vel
+        xy_std = previous.xy_std
+        vel_std = previous.vel_std
+        existence = previous.existence
+        pred_confidence = previous.pred_confidence
         occupied = previous.occupied.clone()
         entity_id = previous.entity_id.clone()
         kind = previous.kind.clone()
@@ -125,39 +150,83 @@ class StateConstructor:
                     xy = torch.where(sel_f, revision.xy.view(1, 1, 2).expand_as(xy), xy)
                     vel = torch.where(sel_f, revision.vel.view(1, 1, 2).expand_as(vel), vel)
                     confidence = torch.where(sel, revision.confidence.expand_as(confidence), confidence)
+                    existence = torch.where(sel, revision.confidence.expand_as(existence), existence)
+                    pred_confidence = torch.where(sel, revision.confidence.expand_as(pred_confidence), pred_confidence)
+                    ev_std = units.uncertainty[b, i].clamp_min(BELIEF_STD_MIN).expand(2)
+                    fused_xy_std = fuse(xy_std[b, slot], ev_std, revision.w_belief, revision.w_evidence)
+                    fused_vel_std = fuse(vel_std[b, slot], ev_std, revision.w_belief, revision.w_evidence)
+                    if revision.reason == "hypothesis_revision":
+                        fused_xy_std = fused_xy_std + revision.conflict
+                        fused_vel_std = fused_vel_std + revision.conflict
+                    elif float(revision.w_evidence) < float(revision.w_belief):
+                        fused_xy_std = fused_xy_std + 0.5 * revision.conflict
+                        fused_vel_std = fused_vel_std + 0.5 * revision.conflict
+                    xy_std = torch.where(
+                        sel_f,
+                        fused_xy_std.clamp_min(BELIEF_STD_MIN).view(1, 1, 2).expand_as(xy_std),
+                        xy_std,
+                    )
+                    vel_std = torch.where(
+                        sel_f,
+                        fused_vel_std.clamp_min(BELIEF_STD_MIN).view(1, 1, 2).expand_as(vel_std),
+                        vel_std,
+                    )
                     if revision.event is not None:
                         corrections.append(revision.event)
                     conflict_fill = revision.conflict.view(1, 1).expand(uncertainty.shape[0], uncertainty.shape[1])
                     ch = uncertainty.clone()
                     ch[:, :, CONFLICT_CHANNEL] = torch.where(sel, conflict_fill, ch[:, :, CONFLICT_CHANNEL])
-                    ch[:, :, NOISY_CHANNEL] = torch.where(sel, units.uncertainty[b, i].expand_as(ch[:, :, NOISY_CHANNEL]), ch[:, :, NOISY_CHANNEL])
+                    ch[:, :, NOISY_CHANNEL] = torch.where(
+                        sel, units.uncertainty[b, i].expand_as(ch[:, :, NOISY_CHANNEL]), ch[:, :, NOISY_CHANNEL]
+                    )
                     uncertainty = ch
                 else:
                     xy = torch.where(sel_f, ev_xy.view(1, 1, 2).expand_as(xy), xy)
                     vel = torch.where(sel_f, ev_vel.view(1, 1, 2).expand_as(vel), vel)
                     confidence = torch.where(sel, units.confidence[b, i].expand_as(confidence), confidence)
+                    existence = torch.where(
+                        sel, units.confidence[b, i].clamp(0.5, 1.0).expand_as(existence), existence
+                    )
+                    pred_confidence = torch.where(sel, units.confidence[b, i].expand_as(pred_confidence), pred_confidence)
+                    ev_std = units.uncertainty[b, i].clamp_min(BELIEF_STD_MIN).expand(2)
+                    xy_std = torch.where(sel_f, ev_std.view(1, 1, 2).expand_as(xy_std), xy_std)
+                    vel_std = torch.where(sel_f, ev_std.view(1, 1, 2).expand_as(vel_std), vel_std)
                     ch = uncertainty.clone()
-                    ch[:, :, NOISY_CHANNEL] = torch.where(sel, units.uncertainty[b, i].expand_as(ch[:, :, NOISY_CHANNEL]), ch[:, :, NOISY_CHANNEL])
+                    ch[:, :, NOISY_CHANNEL] = torch.where(
+                        sel, units.uncertainty[b, i].expand_as(ch[:, :, NOISY_CHANNEL]), ch[:, :, NOISY_CHANNEL]
+                    )
                     uncertainty = ch
                 latent = torch.where(sel_f, positioned[b, i].view(1, 1, dim).expand_as(latent), latent)
                 age = torch.where(sel, torch.zeros_like(age), age)
                 updated = updated | sel
 
+        persist_horizon = age <= float(self.config.persistence.steps)
         if memory_hints is not None:
             assert_shape("memory_hints", memory_hints, (batch, n_slots, dim))
-            inject = occupied & (~updated) & (age <= self.config.persistence.steps)
+            inject = occupied & (~updated) & persist_horizon
             latent = torch.where(inject.unsqueeze(-1), 0.7 * latent + 0.3 * memory_hints, latent)
+            prior = MEMORY_MEAN_GAIN * torch.tanh(memory_hints[..., :2])
+            xy = torch.where(inject.unsqueeze(-1), xy + prior, xy)
 
-        persist = occupied & (~updated) & (age <= float(self.config.persistence.steps))
+        persist = occupied & (~updated) & persist_horizon
         retire = occupied & (~updated) & (age > float(self.config.persistence.steps))
         occupied = (occupied & (~retire)) | updated
-        confidence = torch.where(persist, confidence * 0.85, confidence)
+        confidence = torch.where(persist, confidence * EXISTENCE_DECAY, confidence)
+        existence = torch.where(
+            persist,
+            (existence * EXISTENCE_DECAY).clamp(min=BELIEF_EXISTENCE_FLOOR),
+            existence,
+        )
+        pred_confidence = torch.where(persist, pred_confidence * PRED_CONF_DECAY, pred_confidence)
         extra = (age / float(max(self.config.persistence.steps, 1))).clamp(0.0, 1.0)
         uncertainty = torch.where(
             persist.unsqueeze(-1),
             (uncertainty + extra.unsqueeze(-1)).clamp(0.0, 1.0),
             uncertainty,
         )
+        inflate = extra.unsqueeze(-1) * COAST_STD_GAIN
+        xy_std = torch.where(persist.unsqueeze(-1), (xy_std + inflate).clamp_min(BELIEF_STD_MIN), xy_std)
+        vel_std = torch.where(persist.unsqueeze(-1), (vel_std + inflate).clamp_min(BELIEF_STD_MIN), vel_std)
         coast = persist.unsqueeze(-1).to(xy.dtype)
         xy = xy + vel * dt * coast
         entity_id = torch.where(occupied, entity_id, torch.zeros_like(entity_id))
@@ -165,6 +234,10 @@ class StateConstructor:
         stale_xy = retire.unsqueeze(-1).expand_as(xy)
         xy = torch.where(stale_xy, torch.zeros_like(xy), xy)
         vel = torch.where(stale_xy, torch.zeros_like(vel), vel)
+        xy_std = torch.where(stale_xy, torch.ones_like(xy_std) * 0.1, xy_std)
+        vel_std = torch.where(stale_xy, torch.ones_like(vel_std) * 0.1, vel_std)
+        existence = torch.where(retire, torch.zeros_like(existence), existence)
+        pred_confidence = torch.where(retire, torch.zeros_like(pred_confidence), pred_confidence)
         latent = torch.where(occupied.unsqueeze(-1), latent, torch.zeros_like(latent))
         now = units.timestamp.masked_fill(~units.mask, 0.0).max(dim=1).values
         return WorldState(
@@ -178,6 +251,10 @@ class StateConstructor:
             confidence=confidence,
             uncertainty=uncertainty,
             age_unobserved=torch.where(occupied, age, torch.zeros_like(age)),
+            xy_std=xy_std,
+            vel_std=vel_std,
+            existence=existence,
+            pred_confidence=pred_confidence,
             corrections=tuple(corrections),
         )
 
@@ -187,7 +264,6 @@ class StateConstructor:
             return int(matches.nonzero(as_tuple=False)[0].item())
         free = (~occupied).nonzero(as_tuple=False)
         if free.numel() == 0:
-            # retire the oldest unobserved non-agent slot
             ages = occupied.to(torch.float32)
             ages[AGENT_SLOT] = -1.0
             return int(torch.argmax(ages).item())

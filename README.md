@@ -88,5 +88,6 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/CONSTRAINTS.md`
 - `docs/GATE_03_PRE_WORLD_MODEL.md` — approved lock: belief target, SelfModel
   as passport not network, authority gates action not cognition
-- `docs/GATE_03A_BELIEF_REVISION.md` — belief revision, conflict, WAIT alias
+- `docs/GATE_04_IDENTITY.md` — SelfModel, Authority, Persona (not a prompt)
+- `docs/GATE_05_BELIEF.md` — Belief Engine (mean + std + existence)
 - `docs/PRETRAINING_GATE_01.md`

@@ -82,6 +82,7 @@ def test_gone_forever_false_persistence_bounded() -> None:
     episode = generate_episode(sim, seed=7, episode_index=0, length=12, scenario="gone_forever")
     gone_from = 3
     occupied_flags = []
+    exist_trace = []
     config = load_architecture(ROOT / "configs" / "architecture" / "cpu_dev.yaml")
     ctor = StateConstructor(config)
     device = torch.device("cpu")
@@ -106,7 +107,19 @@ def test_gone_forever_false_persistence_bounded() -> None:
         )
         world = ctor.apply(packed, world, packed.semantic_embedding)
         if t >= gone_from:
-            hit = bool(((world.entity_id == eid) & world.occupied).any())
-            occupied_flags.append(hit)
+            hit = (world.entity_id == eid) & world.occupied
+            occupied_flags.append(bool(hit.any()))
+            if bool(hit.any()):
+                slot = int(hit.nonzero(as_tuple=False)[0, 1].item())
+                exist_trace.append(float(world.existence[0, slot]))
+            else:
+                exist_trace.append(0.0)
     persist = false_persistence_steps(occupied_flags)
     assert persist <= config.persistence.steps + 1
+    assert exist_trace
+    assert exist_trace[0] > 0.0
+    assert exist_trace[-1] == 0.0
+    positive = [e for e in exist_trace if e > 0.0]
+    assert len(positive) >= 1
+    if len(positive) >= 2:
+        assert positive[-1] < positive[0]

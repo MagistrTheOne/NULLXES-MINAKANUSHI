@@ -1974,3 +1974,5 @@ autonomous selection off.
 Canonical lock: `docs/GATE_03_PRE_WORLD_MODEL.md`.
 Executable slice: `docs/GATE_03A_BELIEF_REVISION.md` (belief revision, conflict,
 WAIT ≠ OBSERVE, no world-model training).
+Gate 04 identity lock: `docs/GATE_04_IDENTITY.md` (SelfModel + Authority +
+Persona; short name MINA; not a prompt).

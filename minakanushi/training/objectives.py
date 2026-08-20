@@ -4,7 +4,8 @@ There is no universal next-token loss. August 2026 latent world-model results
 (PhyLatent, PSG-JEPA) are used as engineering constraints on the objective,
 not as architectural identity:
 
-- physical state grounding (L_state)
+- physical state grounding (L_state) — auxiliary, not the belief definition
+- belief NLL + existence (L_belief)
 - multi-horizon future alignment (L_future)
 - counterfactual branch separation (L_action)
 - isotropic latent regularizer to prevent collapse (L_representation)
@@ -43,6 +44,23 @@ def counterfactual_separation(pred_a: Tensor, pred_b: Tensor, margin: float) -> 
     return torch.relu(margin - dist)
 
 
+def belief_nll(mean: Tensor, std: Tensor, true: Tensor, mask: Tensor) -> Tensor:
+    """Gaussian NLL of GT under (mean, std). mask [B, N] bool/float."""
+    sigma = std.clamp_min(1e-3)
+    nll = 0.5 * (((mean - true) / sigma).pow(2) + 2.0 * torch.log(sigma)).sum(dim=-1)
+    weights = mask.to(nll.dtype)
+    return (nll * weights).sum() / weights.sum().clamp_min(1.0)
+
+
+def existence_bce(existence: Tensor, true_present: Tensor, occupied: Tensor) -> Tensor:
+    """BCE of existence vs whether the hypothesized slot was actually present."""
+    p = existence.clamp(1e-4, 1.0 - 1e-4)
+    t = true_present.to(p.dtype)
+    bce = -(t * torch.log(p) + (1.0 - t) * torch.log(1.0 - p))
+    weights = occupied.to(p.dtype)
+    return (bce * weights).sum() / weights.sum().clamp_min(1.0)
+
+
 def compute_objectives(
     *,
     pred_xy: Tensor,
@@ -63,6 +81,10 @@ def compute_objectives(
     latent: Tensor,
     training: TrainingConfig,
     unobserved_mask: Tensor | None = None,
+    xy_std: Tensor | None = None,
+    existence: Tensor | None = None,
+    true_present: Tensor | None = None,
+    hypothesized: Tensor | None = None,
 ) -> ObjectiveBreakdown:
     """Shapes:
     pred_xy/true_xy:     [B, N, 2]
@@ -70,6 +92,8 @@ def compute_objectives(
     pred_future_xy:      [B, H, N, 2]
     uncertainty:         [B, N, U]
     latent:              [B, N, D]
+    xy_std:              [B, N, 2]
+    existence:           [B, N]
     """
     mask = occupied.to(pred_xy.dtype).unsqueeze(-1)
     denom = mask.sum().clamp_min(1.0)
@@ -93,6 +117,16 @@ def compute_objectives(
         pred_future_xy[:, -1], intra_branch_xy[:, -1], training.regularizer.counterfactual_margin
     )
     l_repr = isotropic_regularizer(latent, occupied)
+    if xy_std is None:
+        l_belief_nll = pred_xy.new_zeros(())
+    else:
+        l_belief_nll = belief_nll(pred_xy, xy_std, true_xy, occupied)
+    if existence is None or true_present is None:
+        l_exist = pred_xy.new_zeros(())
+    else:
+        exist_mask = hypothesized if hypothesized is not None else occupied
+        l_exist = existence_bce(existence, true_present, exist_mask)
+    l_belief = l_belief_nll + l_exist
     lambdas = training.lambdas
     total = (
         lambdas.state * l_state
@@ -103,6 +137,7 @@ def compute_objectives(
         + lambdas.memory * l_memory
         + lambdas.action * l_action
         + lambdas.representation * l_repr
+        + lambdas.belief * l_belief
     )
     return ObjectiveBreakdown(
         total=total,
@@ -115,5 +150,6 @@ def compute_objectives(
             "memory": l_memory,
             "action": l_action,
             "representation": l_repr,
+            "belief": l_belief,
         },
     )

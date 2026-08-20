@@ -1,12 +1,15 @@
 """MinakanushiEngine — one external cognition cycle.
 
 encode → position → update world → memory → uncertainty → situation
-→ futures → strategies → constraints → policy → intent
+→ futures → strategies → constraints → authority → intent
+
+Authority gates ActionPolicy. It does not disable WorldState or FutureEngine.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 
@@ -16,6 +19,12 @@ from minakanushi.architecture.model import MinakanushiSystem
 from minakanushi.architecture.outputs import CycleTelemetry
 from minakanushi.constraints.kernel import MinakanushiConstraintKernel
 from minakanushi.future.engine import group_by_strategy
+from minakanushi.identity.authority import AuthorityModel, AuthorityMode, candidate_from_intent
+from minakanushi.identity.constants import SHORT_NAME
+from minakanushi.identity.experience import ExperienceRecord
+from minakanushi.identity.focus import focus_from_world
+from minakanushi.identity.persona import PersonaModel
+from minakanushi.identity.self_model import SelfModel
 from minakanushi.perception.bridge import Observation
 from minakanushi.policy.action_policy import ActionPolicy
 from minakanushi.policy.intent import ActionIntent
@@ -24,6 +33,7 @@ from minakanushi.runtime.telemetry import LatencyClock, TelemetryLogger
 from minakanushi.situation.core import SituationCore
 from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.engine import StrategyEngine
+from minakanushi.training.checkpoint import load_mina, save_mina
 from minakanushi.utils.seed import seed_everything
 from minakanushi.utils.tensors import resolve_device, resolve_dtype
 
@@ -48,6 +58,8 @@ class MinakanushiEngine:
         self.policy = ActionPolicy()
         self.situation = SituationCore()
         self.telemetry = TelemetryLogger(config.runtime.log_level)
+        self.persona = PersonaModel()
+        self.authority = AuthorityModel()
 
     @property
     def future(self):
@@ -69,12 +81,44 @@ class MinakanushiEngine:
         world.entity_xy[0, 0, 0] = start[0]
         world.entity_xy[0, 0, 1] = start[1]
         world.confidence[0, 0] = 1.0
-        return SessionState(cycle_id=0, episode_position=0.0, world=world)
+        self_model = SelfModel.from_config(
+            self.config.architecture.identity,
+            self.config.architecture,
+            hard_limits=tuple(self.config.simulation.hard_constraints),
+        )
+        return SessionState(
+            cycle_id=0,
+            episode_position=0.0,
+            world=world,
+            self_model=self_model,
+            authority=AuthorityModel(mode=self.authority.mode, policy_enabled=self.authority.policy_enabled),
+            persona=PersonaModel.from_dict(self.persona.to_dict()),
+            focus=focus_from_world(world),
+        )
+
+    def set_mode(self, mode: AuthorityMode, *, policy_enabled: bool | None = None) -> None:
+        self.authority.mode = mode
+        if policy_enabled is not None:
+            self.authority.policy_enabled = policy_enabled
+            return
+        if mode == AuthorityMode.AUTONOMOUS:
+            self.authority.policy_enabled = True
+        elif mode in {AuthorityMode.MANUAL, AuthorityMode.SAFE_HOLD}:
+            self.authority.policy_enabled = False
 
     @torch.no_grad()
-    def step(self, observations: Observation, state: SessionState) -> EngineStep:
+    def step(
+        self,
+        observations: Observation,
+        state: SessionState,
+        operator_intent: ActionIntent | None = None,
+    ) -> EngineStep:
         clock = LatencyClock()
         arch = self.config.architecture
+        authority = state.authority or self.authority
+        self_model = state.self_model or SelfModel.from_config(arch.identity, arch)
+        persona = state.persona or self.persona
+        _ = persona.to_dict()
         units_list = self.system.perception.encode(observations, device=self.device, dtype=self.dtype)
         packed = pack_units(
             units_list,
@@ -94,12 +138,39 @@ class MinakanushiEngine:
         world = core.world_state
         self.system.memory.write(world, core.memory_write_candidates)
         sit = self.situation.build(world, self.system.uncertainty(world, packed), ())
-        candidates = self.strategy.generate(sit, self.config.simulation.home)
+        candidates = list(self.strategy.generate(sit, self.config.simulation.home))
+        if operator_intent is not None:
+            extra = candidate_from_intent(operator_intent)
+            if extra.strategy_id not in {c.strategy_id for c in candidates}:
+                candidates.append(extra)
         futures = self.system.future.predict(world, candidates)
         by_id = group_by_strategy(futures)
         allowed, rejected, audits = self.constraints.filter(candidates, by_id)
-        intent = self.policy.select(allowed, by_id, self._goal(sit), observations.timestamp)
+        intent = authority.resolve(
+            self.policy,
+            allowed,
+            by_id,
+            self._goal(sit),
+            observations.timestamp,
+            operator_intent=operator_intent,
+        )
         reasons = tuple(r for audit in audits if not audit.allowed for r in audit.reasons if "ok" not in r)
+        self_model.authority_mode = authority.mode.value
+        self_model.policy_enabled = authority.policy_enabled
+        self_model.operator_connected = authority.operator_connected
+        self_model.tick(arch.dt, sit.uncertainty, world.corrections)
+        self_model.experience.append(
+            ExperienceRecord(
+                event_time=float(observations.timestamp),
+                situation=f"entities={world.entity_count}",
+                belief_before=f"cycle={state.cycle_id}",
+                action=intent.objective,
+                result=intent.provenance,
+                belief_after=f"cycle={state.cycle_id + 1}",
+                correction_required=len(world.corrections) > 0,
+            )
+        )
+        focus = focus_from_world(world)
         telemetry = CycleTelemetry(
             cycle_id=state.cycle_id + 1,
             physical_time=observations.timestamp,
@@ -117,6 +188,12 @@ class MinakanushiEngine:
             selected_strategy=intent.strategy_id,
             cognition_cycles=core.cognition_cycles,
             latency_ms=clock.ms(),
+            extras={
+                "authority_mode": authority.mode.value,
+                "policy_enabled": authority.policy_enabled,
+                "short_name": SHORT_NAME,
+                "persona_bound": False,
+            },
         )
         self.telemetry.emit(telemetry)
         nxt = SessionState(
@@ -125,8 +202,36 @@ class MinakanushiEngine:
             world=world,
             last_intent=intent,
             causal=state.causal,
+            self_model=self_model,
+            authority=authority,
+            persona=persona,
+            focus=focus,
         )
         return EngineStep(state=nxt, action_intent=intent, telemetry=telemetry)
+
+    def identity_bundle(self, state: SessionState) -> dict:
+        return {
+            "self_model": (state.self_model or SelfModel()).to_dict(),
+            "authority": (state.authority or self.authority).to_dict(),
+            "persona": (state.persona or self.persona).to_dict(),
+            "focus": (state.focus.to_dict() if state.focus is not None else {}),
+        }
+
+    def save_checkpoint(self, path: str | Path, state: SessionState) -> Path:
+        return save_mina(path, self.system, extras={"identity": self.identity_bundle(state)})
+
+    def load_checkpoint(self, path: str | Path, state: SessionState) -> SessionState:
+        manifest = load_mina(path, self.system)
+        bundle = (manifest.get("train") or {}).get("identity") or {}
+        if bundle.get("self_model"):
+            state.self_model = SelfModel.from_dict(bundle["self_model"])
+        if bundle.get("authority"):
+            state.authority = AuthorityModel.from_dict(bundle["authority"])
+            self.authority = state.authority
+        if bundle.get("persona"):
+            state.persona = PersonaModel.from_dict(bundle["persona"])
+            self.persona = state.persona
+        return state
 
     def _goal(self, sit) -> tuple[float, float]:
         world = sit.world_state

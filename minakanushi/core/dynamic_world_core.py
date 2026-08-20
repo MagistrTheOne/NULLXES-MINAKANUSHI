@@ -19,7 +19,7 @@ from minakanushi.architecture.outputs import CoreOutput, PositionState
 from minakanushi.core.cognitive_block import CognitiveBlock
 from minakanushi.core.convergence import slot_delta
 from minakanushi.core.recurrent_state import clone_world
-from minakanushi.state.world import WorldState
+from minakanushi.state.world import BELIEF_STD_MIN, WorldState
 from minakanushi.utils.tensors import assert_finite, assert_shape
 
 
@@ -83,6 +83,19 @@ class DynamicWorldCore(nn.Module):
         inferred_vel = torch.where(observed.unsqueeze(-1), vel, state.entity_vel)
         state.entity_vel = torch.where(state.occupied.unsqueeze(-1), inferred_vel, torch.zeros_like(inferred_vel))
         state.entity_xy = torch.where(state.occupied.unsqueeze(-1), xy_now, torch.zeros_like(xy_now))
+        unobs = (~observed) & state.occupied
+        resid_abs = correction.abs()
+        state.xy_std = torch.where(
+            unobs.unsqueeze(-1),
+            (state.xy_std + resid_abs).clamp_min(BELIEF_STD_MIN),
+            state.xy_std,
+        )
+        resid_n = resid_abs.mean(dim=-1)
+        state.pred_confidence = torch.where(
+            unobs,
+            (state.pred_confidence * torch.exp(-resid_n)).clamp(1e-4, 1.0),
+            state.pred_confidence,
+        )
         assert_finite("world.latent_state", state.latent_state)
         writes = self.memory_write(state.latent_state)
         seed = self.seed_head(state.latent_state.mean(dim=1))

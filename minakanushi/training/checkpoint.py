@@ -59,6 +59,8 @@ def build_manifest(config: ArchitectureConfig, extras: dict | None = None) -> di
             "future_engine": True,
             "strategy_engine": True,
             "constraint_kernel": True,
+            "self_model": True,
+            "authority": True,
         },
     }
     if extras:
@@ -94,8 +96,11 @@ def save_mina(
             json.dumps(
                 {
                     "architecture": "MINAKANUSHI",
+                    "short_name": "MINA",
+                    "architecture_id": "nullxes.minakanushi",
                     "organization": "NULLXES",
                     "native_runtime": "nullxes",
+                    "identity_state": (extras or {}).get("identity"),
                 }
             ),
         )
