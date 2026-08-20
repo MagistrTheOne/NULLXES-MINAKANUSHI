@@ -107,6 +107,7 @@ Direction after Yunmu / Gate 9+. Does not change the frozen 6.8B loop, dims, or 
 
 ## Docs
 
+- `CHECKLIST.md` — этапы с 21-08-2026, машины, метрики
 - `docs/ARCHITECTURE.md`
 - `docs/POSITION_FIELD.md`
 - `docs/WORLD_STATE.md`
