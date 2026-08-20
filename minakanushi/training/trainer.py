@@ -144,12 +144,15 @@ class Trainer:
         self._amp_enabled = self.device.type == "cuda" and self.dtype in (torch.bfloat16, torch.float16)
         self.compute_dtype = torch.float32 if self._amp_enabled else self.dtype
         self.system = MinakanushiSystem(config.architecture).to(self.device)
-        if train.activation_checkpoint or is_6_8b_profile(config.architecture):
+        if train.activation_checkpoint:
             self.system.world_core.activation_checkpoint = True
         if train.parallelism == "fsdp2_zero3":
             from minakanushi.training.parallel import wrap_fsdp2
 
-            self.system = wrap_fsdp2(self.system)
+            self.system = wrap_fsdp2(
+                self.system,
+                activation_checkpoint=bool(train.activation_checkpoint),
+            )
         if self._amp_enabled:
             self.system.world_core.checkpoint_amp_dtype = self.dtype
         self.constructor = StateConstructor(config.architecture)

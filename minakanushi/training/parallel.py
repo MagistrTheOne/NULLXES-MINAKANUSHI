@@ -289,8 +289,13 @@ def _attach_replicated_grad_hook(parameter: nn.Parameter, world_size: int) -> No
     parameter.register_hook(_allreduce_grad)
 
 
-def wrap_fsdp2(module: nn.Module) -> nn.Module:
+def wrap_fsdp2(module: nn.Module, activation_checkpoint: bool | None = None) -> nn.Module:
     """ZeRO-3 on CognitiveBlock plus averaged grads on replicated leftovers.
+
+    Activation checkpoint must wrap the dense block *before* fully_shard.
+    Checkpointing inside an already-sharded FSDP module captures DTensor
+    all-gathers as saved tensors; recompute then sees a different tensor list
+    ([4096, 4096] weights vs [512, 4096] activations).
 
     Requires torch.distributed already initialized (torchrun).
     """
@@ -304,13 +309,31 @@ def wrap_fsdp2(module: nn.Module) -> nn.Module:
         raise RuntimeError("PyTorch FSDP2 fully_shard is required for 6.8B") from exc
 
     from minakanushi.core.cognitive_block import CognitiveBlock
+    from minakanushi.core.dynamic_world_core import DynamicWorldCore
 
-    # Do not pass param_dtype=bf16. Trainer keeps fp32 weights and downcasts
-    # matmuls with autocast. FSDP MixedPrecisionPolicy on the outer block
-    # saved bf16 activations then recomputed fp32 inside activation checkpoint.
-    for child in module.modules():
-        if isinstance(child, CognitiveBlock):
-            fully_shard(child)
+    world_core = getattr(module, "world_core", None)
+    use_ac = bool(world_core.activation_checkpoint) if activation_checkpoint is None else bool(activation_checkpoint)
+    if isinstance(world_core, DynamicWorldCore):
+        new_blocks = []
+        for block in world_core.cognitive_blocks():
+            block.activation_checkpoint = False
+            if use_ac:
+                try:
+                    from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+                        CheckpointImpl,
+                        checkpoint_wrapper,
+                    )
+                except ImportError as exc:
+                    raise RuntimeError("FSDP2 activation checkpoint requires checkpoint_wrapper") from exc
+                block = checkpoint_wrapper(block, checkpoint_impl=CheckpointImpl.NO_REENTRANT)
+            fully_shard(block)
+            new_blocks.append(block)
+        world_core.blocks = nn.ModuleList(new_blocks)
+        world_core._activation_checkpoint = use_ac
+    else:
+        for child in module.modules():
+            if isinstance(child, CognitiveBlock):
+                fully_shard(child)
     # Do not fully_shard MinakanushiSystem. Root wrap turns perception/NPF
     # Linear weights into DTensors; encode() feeds dense CUDA tensors and
     # aten.addmm then raises mixed Tensor/DTensor. ZeRO-3 lives in DWC blocks.

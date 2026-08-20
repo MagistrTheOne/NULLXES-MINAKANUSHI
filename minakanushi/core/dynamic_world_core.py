@@ -37,6 +37,14 @@ class DynamicWorldCore(nn.Module):
         self._activation_checkpoint = False
         self._amp_dtype: torch.dtype | None = None
 
+    def cognitive_blocks(self):
+        """Yield inner CognitiveBlock, walking checkpoint_wrapper if present."""
+        for block in self.blocks:
+            inner = block
+            while hasattr(inner, "_checkpoint_wrapped_module"):
+                inner = inner._checkpoint_wrapped_module
+            yield inner
+
     @property
     def activation_checkpoint(self) -> bool:
         return self._activation_checkpoint
@@ -44,7 +52,7 @@ class DynamicWorldCore(nn.Module):
     @activation_checkpoint.setter
     def activation_checkpoint(self, value: bool) -> None:
         self._activation_checkpoint = bool(value)
-        for block in self.blocks:
+        for block in self.cognitive_blocks():
             block.activation_checkpoint = self._activation_checkpoint
 
     @property
@@ -54,7 +62,7 @@ class DynamicWorldCore(nn.Module):
     @checkpoint_amp_dtype.setter
     def checkpoint_amp_dtype(self, value: torch.dtype | None) -> None:
         self._amp_dtype = value
-        for block in self.blocks:
+        for block in self.cognitive_blocks():
             block.amp_dtype = value
 
     def forward(
