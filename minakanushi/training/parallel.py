@@ -246,5 +246,7 @@ def wrap_fsdp2(module: nn.Module) -> nn.Module:
     for child in module.modules():
         if isinstance(child, CognitiveBlock):
             fully_shard(child, mp_policy=mp)
-    fully_shard(module, mp_policy=mp)
+    # Do not fully_shard MinakanushiSystem. Root wrap turns perception/NPF
+    # Linear weights into DTensors; encode() feeds dense CUDA tensors and
+    # aten.addmm then raises mixed Tensor/DTensor. ZeRO-3 lives in DWC blocks.
     return module

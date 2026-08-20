@@ -108,3 +108,34 @@ def test_fsdp_collect_gathers_full_state_dict(monkeypatch) -> None:
 
 def test_is_fsdp_wrapped_false_for_plain_linear() -> None:
     assert is_fsdp_wrapped(nn.Linear(2, 2)) is False
+
+
+def test_wrap_fsdp2_shards_cognitive_blocks_not_root(monkeypatch) -> None:
+    from minakanushi.architecture.model import MinakanushiSystem
+    from minakanushi.core.cognitive_block import CognitiveBlock
+
+    sharded: list[nn.Module] = []
+
+    class _FakeMP:
+        def __init__(self, **_kwargs) -> None:
+            return
+
+    def fake_fully_shard(mod, mp_policy=None):
+        sharded.append(mod)
+        return mod
+
+    monkeypatch.setattr("torch.distributed.is_available", lambda: True)
+    monkeypatch.setattr("torch.distributed.is_initialized", lambda: True)
+    import torch.distributed.fsdp as fsdp
+
+    monkeypatch.setattr(fsdp, "MixedPrecisionPolicy", _FakeMP, raising=False)
+    monkeypatch.setattr(fsdp, "fully_shard", fake_fully_shard, raising=False)
+
+    arch = load_architecture(ROOT / "configs" / "architecture" / "cpu_dev.yaml")
+    system = MinakanushiSystem(arch)
+    wrapped = wrap_fsdp2(system)
+    assert wrapped is system
+    assert sharded
+    assert all(isinstance(mod, CognitiveBlock) for mod in sharded)
+    assert system not in sharded
+    assert system.perception not in sharded
