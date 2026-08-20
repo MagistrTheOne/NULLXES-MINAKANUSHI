@@ -35,13 +35,16 @@ def _exam():
 
 def _mean_std(values: list[float]) -> dict[str, float]:
     if not values:
-        return {"n": 0.0, "mean": 0.0, "median": 0.0, "std": 0.0, "min": 0.0, "max": 0.0}
+        return {"n": 0.0, "mean": 0.0, "median": 0.0, "std": 0.0, "p10": 0.0, "p90": 0.0, "min": 0.0, "max": 0.0}
     std = statistics.stdev(values) if len(values) > 1 else 0.0
+    ordered = sorted(values)
     return {
         "n": float(len(values)),
         "mean": float(statistics.mean(values)),
         "median": float(statistics.median(values)),
         "std": float(std),
+        "p10": float(ordered[max(0, int(0.10 * (len(ordered) - 1)))]),
+        "p90": float(ordered[min(len(ordered) - 1, int(0.90 * (len(ordered) - 1)))]),
         "min": float(min(values)),
         "max": float(max(values)),
     }
@@ -88,6 +91,7 @@ def diagnose(trainer, n: int, seed0: int) -> dict:
                 [1.0 if r["identity"] == "same_hypothesis_revised" else 0.0 for r in rows]
             ),
             "terms": _term_means(rows),
+            "direction_samples": direction,
         }
     hidden = by_class["hidden_correction"]["direction"]["mean"]
     if hidden >= DIRECTION_LIVE:
