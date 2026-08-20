@@ -30,6 +30,16 @@ SCENARIOS: tuple[str, ...] = (
     "obstacles",
 )
 
+GATE03_SCENARIOS: tuple[str, ...] = (
+    "hidden_correction",
+    "conflict",
+    "gone_forever",
+    "accelerate",
+    "turn",
+    "occlusion",
+    "delayed",
+)
+
 
 @dataclass
 class FrameTruth:
@@ -99,9 +109,19 @@ def generate_episode(
     rng = np.random.default_rng(local_seed)
 
     if name == "accelerate":
+        world.movers[0].accel = np.array([0.4, 0.0], dtype=np.float64)
         world.movers[0].vel = world.movers[0].vel * 0.2
     if name == "turn":
         world.movers[0].vel = np.array([0.6, 0.0])
+    if name == "hidden_correction":
+        world.movers[0].xy = world.agent.xy + np.array([1.4, 0.0])
+        world.movers[0].vel = np.array([-0.8, 0.0])
+        world.hidden_ids = set()
+    if name == "conflict":
+        world.movers[0].xy = world.agent.xy + np.array([1.2, 0.0])
+        world.movers[0].vel = np.zeros(2)
+    if name == "gone_forever":
+        world.movers[0].xy = world.agent.xy + np.array([1.3, 0.0])
 
     frames_obs: list[Observation] = []
     frames_gt: list[FrameTruth] = []
@@ -109,9 +129,27 @@ def generate_episode(
 
     for t in range(length):
         if name == "accelerate":
-            world.movers[0].vel = world.movers[0].vel + np.array([0.05, 0.0])
+            pass
         if name == "turn" and t == length // 2:
             world.movers[0].vel = np.array([0.0, 0.7])
+        if name == "hidden_correction":
+            if 1 <= t <= 5:
+                world.hidden_ids.add(world.movers[0].body_id)
+            elif t == 6:
+                world.hidden_ids.discard(world.movers[0].body_id)
+                world.movers[0].xy = world.agent.xy + np.array([1.4, 0.0])
+                world.movers[0].vel = np.zeros(2)
+            else:
+                world.hidden_ids.discard(world.movers[0].body_id)
+        if name == "conflict":
+            if t < 4:
+                world.movers[0].xy = world.agent.xy + np.array([1.0, 0.0])
+            else:
+                world.movers[0].xy = world.agent.xy + np.array([3.0, 0.0])
+                world.movers[0].vel = np.zeros(2)
+        if name == "gone_forever" and t >= 3:
+            world.removed_ids.add(world.movers[0].body_id)
+            world.hidden_ids.add(world.movers[0].body_id)
         if name == "agent_move":
             intent = _intent("MOVE_TO", (float(world.targets[0].xy[0]), float(world.targets[0].xy[1])))
         else:

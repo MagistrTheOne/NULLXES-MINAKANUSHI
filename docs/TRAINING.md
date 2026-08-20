@@ -14,7 +14,7 @@ L = λs L_state + λt L_temporal + λf L_future + λu L_uncertainty
 | L_state | physical state grounding (xy readout vs simulator) |
 | L_temporal | next-step transition |
 | L_future | multi-horizon trajectory |
-| L_uncertainty | NLL calibration of error vs uncertainty |
+| L_uncertainty | NLL on state-uncertainty channel 6 plus missing-channel calibration |
 | L_causal | velocity-structure consistency |
 | L_memory | occluded-entity position retention |
 | L_action | counterfactual branch separation |

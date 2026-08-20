@@ -216,6 +216,8 @@ Smallest coherent next slice:
 
 Do not add vision, language, hardware, or a new cognitive block type.
 
+Executable contract: `docs/GATE_03A_BELIEF_REVISION.md`.
+
 ---
 
 ## Adversarial Reality Check

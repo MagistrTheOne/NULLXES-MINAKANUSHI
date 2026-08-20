@@ -14,3 +14,16 @@ slots. Semantic consolidation is not in the Milestone 1 runtime.
 
 Relevance uses identity, recency (via NPF memory age), occupancy, and
 confidence — not cosine search over text chunks.
+
+## Belief is not memory
+
+```text
+PAST      → Memory     what was
+CURRENT   → Belief     what is probable now
+POSSIBLE  → Future     what may be
+```
+
+Memory is a prior for unobserved slots (latent hints only). It does not
+average with live evidence on position. Current kinematics live in WorldState
+belief. Futures must not write back into belief. See
+`docs/GATE_03A_BELIEF_REVISION.md`.

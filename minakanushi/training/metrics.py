@@ -22,6 +22,10 @@ class MetricBundle:
     memory_effect_delta: float
     constraint_violation_count: int
     closed_loop_success_rate: float
+    belief_revision_accuracy: float = 0.0
+    correction_latency: float = -1.0
+    false_persistence_steps: float = 0.0
+    evidence_dominance: float = 0.0
 
 
 def masked_mse(pred: Tensor, true: Tensor, mask: Tensor) -> Tensor:
@@ -57,6 +61,36 @@ def memory_effect_delta(with_memory: Tensor, without_memory: Tensor, mask: Tenso
     """L2 change in occupied latents when retrieval is enabled vs zeros."""
     w = mask.to(with_memory.dtype).unsqueeze(-1)
     return (with_memory - without_memory).pow(2).mul(w).sum() / w.sum().clamp_min(1.0)
+
+
+def belief_revision_accuracy(old_xy: Tensor, new_xy: Tensor, evidence_xy: Tensor) -> Tensor:
+    """1 if the update moved toward evidence, 0 if it stayed or moved away."""
+    before = torch.linalg.vector_norm(old_xy - evidence_xy, dim=-1)
+    after = torch.linalg.vector_norm(new_xy - evidence_xy, dim=-1)
+    return (after < before).to(old_xy.dtype)
+
+
+def correction_latency(wrong_at: int, evidence_at: int, corrected_at: int) -> int:
+    """Steps from correct evidence to completed revision. -1 if never corrected."""
+    if corrected_at < 0 or evidence_at < 0:
+        return -1
+    return max(0, corrected_at - evidence_at)
+
+
+def false_persistence_steps(occupied_after_gone: list[bool]) -> int:
+    """How many steps a vanished entity stays occupied. Memory without decay hallucinates."""
+    n = 0
+    for flag in occupied_after_gone:
+        if not flag:
+            break
+        n += 1
+    return n
+
+
+def evidence_dominance(result: float, belief: float, evidence: float) -> float:
+    """1 if result is closer to evidence than to the midpoint (not blind average)."""
+    mid = 0.5 * (belief + evidence)
+    return 1.0 if abs(result - evidence) < abs(result - mid) else 0.0
 
 
 def count_hard_violations(candidate, trajectories, simulation) -> int:

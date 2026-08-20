@@ -52,6 +52,7 @@ class UncertaintyEngine(nn.Module):
         cols[0] = torch.maximum(cols[0], missing)
         cols[1] = torch.maximum(cols[1], noisy)
         cols[2] = torch.maximum(cols[2], conflict)
+        cols[2] = torch.maximum(cols[2], world.uncertainty[..., 2])
         cols[6] = torch.maximum(cols[6], world.uncertainty.mean(dim=-1))
         channels = torch.stack(cols, dim=-1)
         occupied = world.occupied.to(channels.dtype).unsqueeze(-1)

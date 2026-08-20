@@ -8,6 +8,11 @@ from torch import Tensor
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.mina_unit import KIND_IDS, MinaUnitBatch
 from minakanushi.architecture.outputs import PositionState
+from minakanushi.state.correction import (
+    CONFLICT_CHANNEL,
+    NOISY_CHANNEL,
+    revise_slot,
+)
 from minakanushi.state.entity import AGENT_SLOT
 from minakanushi.state.world import WorldState
 from minakanushi.utils.tensors import assert_finite, assert_shape
@@ -82,23 +87,59 @@ class StateConstructor:
         age = previous.age_unobserved + was_occupied.to(dtype=previous.age_unobserved.dtype)
 
         updated = torch.zeros_like(occupied)
+        dt = float(self.config.dt)
+        corrections: list = []
         for b in range(batch):
             for i in range(n_obs):
                 if not bool(units.mask[b, i]):
                     continue
                 eid = int(units.entity_id[b, i].item())
+                existed = bool(((entity_id[b] == eid) & occupied[b]).any()) if eid != 0 else False
                 slot = self._find_or_allocate(entity_id[b], occupied[b], eid)
+                observed_last = existed and float(previous.age_unobserved[b, slot].item()) == 0.0
                 occupied[b, slot] = True
                 entity_id[b, slot] = eid
                 kind[b, slot] = units.kind[b, i]
                 sel = torch.zeros_like(updated)
                 sel[b, slot] = True
                 sel_f = sel.unsqueeze(-1)
-                xy = torch.where(sel_f, units.spatial_position[b, i, :2].view(1, 1, 2).expand_as(xy), xy)
+                ev_xy = units.spatial_position[b, i, :2]
+                ev_vel = units.velocity[b, i]
+                ev_age = (units.arrival_time[b, i] - units.timestamp[b, i]).clamp_min(0.0)
+                if existed:
+                    revision = revise_slot(
+                        entity_id=eid,
+                        old_xy=xy[b, slot],
+                        old_vel=vel[b, slot],
+                        old_confidence=confidence[b, slot],
+                        old_uncertainty=uncertainty[b, slot],
+                        evidence_xy=ev_xy,
+                        evidence_vel=ev_vel,
+                        evidence_confidence=units.confidence[b, i],
+                        evidence_uncertainty=units.uncertainty[b, i],
+                        belief_age_seconds=previous.age_unobserved[b, slot] * dt,
+                        evidence_age_seconds=ev_age,
+                        observed_last_cycle=observed_last,
+                        evidence_source=f"source_{int(units.source_id[b, i].item())}",
+                    )
+                    xy = torch.where(sel_f, revision.xy.view(1, 1, 2).expand_as(xy), xy)
+                    vel = torch.where(sel_f, revision.vel.view(1, 1, 2).expand_as(vel), vel)
+                    confidence = torch.where(sel, revision.confidence.expand_as(confidence), confidence)
+                    if revision.event is not None:
+                        corrections.append(revision.event)
+                    conflict_fill = revision.conflict.view(1, 1).expand(uncertainty.shape[0], uncertainty.shape[1])
+                    ch = uncertainty.clone()
+                    ch[:, :, CONFLICT_CHANNEL] = torch.where(sel, conflict_fill, ch[:, :, CONFLICT_CHANNEL])
+                    ch[:, :, NOISY_CHANNEL] = torch.where(sel, units.uncertainty[b, i].expand_as(ch[:, :, NOISY_CHANNEL]), ch[:, :, NOISY_CHANNEL])
+                    uncertainty = ch
+                else:
+                    xy = torch.where(sel_f, ev_xy.view(1, 1, 2).expand_as(xy), xy)
+                    vel = torch.where(sel_f, ev_vel.view(1, 1, 2).expand_as(vel), vel)
+                    confidence = torch.where(sel, units.confidence[b, i].expand_as(confidence), confidence)
+                    ch = uncertainty.clone()
+                    ch[:, :, NOISY_CHANNEL] = torch.where(sel, units.uncertainty[b, i].expand_as(ch[:, :, NOISY_CHANNEL]), ch[:, :, NOISY_CHANNEL])
+                    uncertainty = ch
                 latent = torch.where(sel_f, positioned[b, i].view(1, 1, dim).expand_as(latent), latent)
-                confidence = torch.where(sel, units.confidence[b, i].expand_as(confidence), confidence)
-                noise = units.uncertainty[b, i].clamp_min(0.0).view(1, 1, 1).expand_as(uncertainty)
-                uncertainty = torch.where(sel_f, noise, uncertainty)
                 age = torch.where(sel, torch.zeros_like(age), age)
                 updated = updated | sel
 
@@ -117,6 +158,8 @@ class StateConstructor:
             (uncertainty + extra.unsqueeze(-1)).clamp(0.0, 1.0),
             uncertainty,
         )
+        coast = persist.unsqueeze(-1).to(xy.dtype)
+        xy = xy + vel * dt * coast
         entity_id = torch.where(occupied, entity_id, torch.zeros_like(entity_id))
         kind = torch.where(occupied, kind, torch.zeros_like(kind))
         stale_xy = retire.unsqueeze(-1).expand_as(xy)
@@ -135,6 +178,7 @@ class StateConstructor:
             confidence=confidence,
             uncertainty=uncertainty,
             age_unobserved=torch.where(occupied, age, torch.zeros_like(age)),
+            corrections=tuple(corrections),
         )
 
     def _find_or_allocate(self, ids: Tensor, occupied: Tensor, eid: int) -> int:

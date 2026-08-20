@@ -14,6 +14,7 @@ import numpy as np
 from minakanushi.architecture.config import SimulationConfig
 from minakanushi.perception.bridge import Observation
 from minakanushi.policy.intent import ActionIntent
+from minakanushi.strategy.hold import is_hold
 
 
 @dataclass
@@ -23,6 +24,7 @@ class Body:
     xy: np.ndarray
     vel: np.ndarray
     size: np.ndarray
+    accel: np.ndarray | None = None
 
 
 class SyntheticWorld:
@@ -44,6 +46,8 @@ class SyntheticWorld:
             for t in config.targets
         ]
         self.last_intent = "SAFE_HOLD"
+        self.hidden_ids: set[int] = set()
+        self.removed_ids: set[int] = set()
 
     def step(self, intent: ActionIntent | None) -> None:
         dt = self.config.dt
@@ -52,6 +56,10 @@ class SyntheticWorld:
             self.agent.vel = self._velocity_from_intent(intent)
         self.agent.xy = self._integrate(self.agent.xy, self.agent.vel, dt, moving=True)
         for mover in self.movers:
+            if mover.body_id in self.removed_ids:
+                continue
+            if mover.accel is not None:
+                mover.vel = mover.vel + mover.accel * dt
             mover.xy = self._integrate(mover.xy, mover.vel, dt, moving=True, bounce=True)
         self.t += dt
 
@@ -59,6 +67,11 @@ class SyntheticWorld:
         visible = []
         occluded = []
         for body in [*self.movers, *self.obstacles, *self.targets]:
+            if body.body_id in self.removed_ids:
+                continue
+            if body.body_id in self.hidden_ids:
+                occluded.append(body.body_id)
+                continue
             if self._visible(body):
                 noisy_xy = body.xy + self.rng.normal(0.0, self.config.sensor_noise_std, size=2)
                 conf = max(0.2, 1.0 - self.config.sensor_noise_std * 2.0)
@@ -97,7 +110,7 @@ class SyntheticWorld:
         }
 
     def _velocity_from_intent(self, intent: ActionIntent) -> np.ndarray:
-        if intent.objective in {"WAIT", "OBSERVE", "SAFE_HOLD", "ABORT", "REQUEST_ASSISTANCE"}:
+        if is_hold(intent.objective):
             return np.zeros(2)
         target = np.array(intent.target_state, dtype=np.float64)
         delta = target - self.agent.xy

@@ -20,6 +20,7 @@ from minakanushi.future.trajectory import FutureTrajectory
 from minakanushi.state.entity import AGENT_SLOT
 from minakanushi.state.world import WorldState
 from minakanushi.strategy.candidate import StrategyCandidate
+from minakanushi.strategy.hold import HOLD_MODE, is_hold
 
 
 class FutureEngine(nn.Module):
@@ -122,7 +123,8 @@ class FutureEngine(nn.Module):
 
     def _action_vector(self, strategy: StrategyCandidate, agent_xy: Tensor) -> Tensor:
         zeros = torch.zeros(agent_xy.shape[0], 4, device=agent_xy.device, dtype=agent_xy.dtype)
-        if strategy.objective in {"WAIT", "OBSERVE", "SAFE_HOLD", "ABORT", "REQUEST_ASSISTANCE"}:
+        if is_hold(strategy.objective):
+            zeros[:, 3] = HOLD_MODE[strategy.objective]
             return zeros
         target = torch.tensor(strategy.target_xy, device=agent_xy.device, dtype=agent_xy.dtype).unsqueeze(0)
         delta = target - agent_xy

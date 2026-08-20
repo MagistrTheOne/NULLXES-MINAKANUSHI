@@ -54,6 +54,7 @@ Curriculum:
 
 - Stage 0 architecture validation — `configs/training/stage0_validation.yaml`
 - Stage 0 overfit wiring proof — `configs/training/stage0_overfit.yaml` (16 deterministic episodes)
+- Stage 0 generalization eval (no training) — `configs/training/stage0_generalization.yaml`
 - Stage 1 world representation — `configs/training/stage1_world.yaml`
 - Stage 2 temporal dynamics — `configs/training/stage2_temporal.yaml`
 
@@ -87,4 +88,5 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/CONSTRAINTS.md`
 - `docs/GATE_03_PRE_WORLD_MODEL.md` — approved lock: belief target, SelfModel
   as passport not network, authority gates action not cognition
+- `docs/GATE_03A_BELIEF_REVISION.md` — belief revision, conflict, WAIT alias
 - `docs/PRETRAINING_GATE_01.md`

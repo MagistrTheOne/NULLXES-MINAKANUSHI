@@ -1972,3 +1972,5 @@ autonomous selection off.
 `B_t` is a probabilistic belief state, not a hidden embedding only.
 
 Canonical lock: `docs/GATE_03_PRE_WORLD_MODEL.md`.
+Executable slice: `docs/GATE_03A_BELIEF_REVISION.md` (belief revision, conflict,
+WAIT ≠ OBSERVE, no world-model training).

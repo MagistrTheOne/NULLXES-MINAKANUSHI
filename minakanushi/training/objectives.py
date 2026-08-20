@@ -18,6 +18,7 @@ import torch
 from torch import Tensor
 
 from minakanushi.architecture.config import TrainingConfig
+from minakanushi.state.correction import MISSING_CHANNEL, STATE_CHANNEL
 from minakanushi.uncertainty.calibration import gaussian_nll
 
 
@@ -61,6 +62,7 @@ def compute_objectives(
     intra_branch_xy: Tensor,
     latent: Tensor,
     training: TrainingConfig,
+    unobserved_mask: Tensor | None = None,
 ) -> ObjectiveBreakdown:
     """Shapes:
     pred_xy/true_xy:     [B, N, 2]
@@ -76,8 +78,12 @@ def compute_objectives(
     future_mask = occupied.unsqueeze(1).unsqueeze(-1).to(pred_future_xy.dtype)
     l_future = ((pred_future_xy - true_future_xy).pow(2) * future_mask).sum() / future_mask.sum().clamp_min(1.0)
     error = pred_xy - true_xy
-    l_uncertainty = gaussian_nll(error, uncertainty)
-    l_uncertainty = (l_uncertainty * occupied.to(l_uncertainty.dtype)).sum() / occupied.to(l_uncertainty.dtype).sum().clamp_min(1.0)
+    l_unc_state = gaussian_nll(error, uncertainty, channel=STATE_CHANNEL)
+    l_unc_state = (l_unc_state * occupied.to(l_unc_state.dtype)).sum() / occupied.to(l_unc_state.dtype).sum().clamp_min(1.0)
+    unobserved = unobserved_mask if unobserved_mask is not None else torch.zeros_like(occupied)
+    l_unc_missing = (uncertainty[..., MISSING_CHANNEL] - unobserved.to(uncertainty.dtype)).pow(2)
+    l_unc_missing = (l_unc_missing * occupied.to(l_unc_missing.dtype)).sum() / occupied.to(l_unc_missing.dtype).sum().clamp_min(1.0)
+    l_uncertainty = l_unc_state + l_unc_missing
     mem_w = memory_mask.to(memory_xy.dtype).unsqueeze(-1)
     l_memory = ((memory_xy - memory_true_xy).pow(2) * mem_w).sum() / mem_w.sum().clamp_min(1.0)
     l_causal = ((causal_pred - causal_true).pow(2) * mask).sum() / denom

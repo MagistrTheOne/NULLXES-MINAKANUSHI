@@ -31,3 +31,8 @@ while `age_unobserved <= persistence.steps`, retire after that, correct when
 later evidence for the same id arrives.
 
 Self is slot 0 (entity_id=1, kind=agent).
+
+Belief revision (Gate 03A): returning evidence after a gap writes a
+`CorrectionEvent` and must not be a 50/50 average of stale memory and the
+new measurement. Unobserved occupied slots coast on velocity while
+uncertainty grows and confidence decays. See `docs/GATE_03A_BELIEF_REVISION.md`.

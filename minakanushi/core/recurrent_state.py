@@ -19,4 +19,5 @@ def clone_world(state: WorldState) -> WorldState:
         age_unobserved=state.age_unobserved.clone(),
         self_index=state.self_index,
         provenance=state.provenance,
+        corrections=tuple(state.corrections),
     )

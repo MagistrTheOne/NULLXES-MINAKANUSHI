@@ -77,6 +77,7 @@ class PerceptionBridge(nn.Module):
                 kind="agent",
                 arrival_time=arrival,
                 source_rate=observation.source_rate_telemetry,
+                metadata={"vel": observation.agent_vel},
             )
         )
         for seq, item in enumerate(observation.visible, start=1):
@@ -116,7 +117,7 @@ class PerceptionBridge(nn.Module):
                     kind=kind,
                     arrival_time=arr_t,
                     source_rate=rate,
-                    metadata={"occluded": "false"},
+                    metadata={"occluded": "false", "vel": item.get("vel", (0.0, 0.0))},
                 )
             )
         return units

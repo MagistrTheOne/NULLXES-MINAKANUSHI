@@ -97,6 +97,7 @@ class MinaUnitBatch:
     entity_id:          [B, N]     long
     kind:               [B, N]     long
     mask:               [B, N]     bool  — True = valid unit
+    velocity:           [B, N, 2]  float — reported planar velocity if the source has it
     """
 
     semantic_embedding: Tensor
@@ -115,6 +116,7 @@ class MinaUnitBatch:
     entity_id: Tensor
     kind: Tensor
     mask: Tensor
+    velocity: Tensor
 
     def validate(self) -> None:
         batch, count, dim = self.semantic_embedding.shape
@@ -128,7 +130,9 @@ class MinaUnitBatch:
         assert_shape("episode_position", self.episode_position, (batch, count))
         assert_shape("memory_age", self.memory_age, (batch, count))
         assert_shape("source_id", self.source_id, (batch, count))
+        assert_shape("kind", self.kind, (batch, count))
         assert_shape("mask", self.mask, (batch, count))
+        assert_shape("velocity", self.velocity, (batch, count, 2))
         assert_finite("semantic_embedding", self.semantic_embedding)
         assert_finite("timestamp", self.timestamp)
 
@@ -162,6 +166,7 @@ def empty_batch(
         entity_id=l.clone(),
         kind=l.clone(),
         mask=b.clone(),
+        velocity=torch.zeros(batch_size, max_units, 2, device=device, dtype=dtype),
     )
 
 
@@ -203,5 +208,8 @@ def pack_units(
         packed.entity_id[0, i] = unit.entity_reference
         packed.kind[0, i] = KIND_IDS[unit.kind]
         packed.mask[0, i] = True
+        vel = unit.metadata.get("vel", (0.0, 0.0))
+        packed.velocity[0, i, 0] = float(vel[0])
+        packed.velocity[0, i, 1] = float(vel[1])
     packed.validate()
     return packed

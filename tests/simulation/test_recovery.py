@@ -43,4 +43,4 @@ def test_later_evidence_corrects_position() -> None:
     second = pack_units([unit(6.0, 0.2)], batch_index=0, max_units=8, latent_dim=dim, episode_position=1.0, now=0.2, device=device, dtype=dtype)
     world = ctor.apply(second, world, second.semantic_embedding)
     slot = (world.entity_id == 11).nonzero(as_tuple=False)[0, 1]
-    assert abs(float(world.entity_xy[0, slot, 0]) - 6.0) < 1e-5
+    assert abs(float(world.entity_xy[0, slot, 0]) - 6.0) < 0.2

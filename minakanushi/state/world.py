@@ -63,6 +63,7 @@ class WorldState:
     age_unobserved: Tensor
     self_index: int = 0
     provenance: str = "state_constructor"
+    corrections: tuple = ()
 
     @property
     def entity_count(self) -> int:

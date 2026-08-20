@@ -20,7 +20,7 @@ from minakanushi.policy.action_policy import ActionPolicy
 from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.checkpoint import save_mina
-from minakanushi.training.metrics import assemble_bundle, policy_firewall_metrics
+from minakanushi.training.metrics import assemble_bundle, memory_effect_delta, policy_firewall_metrics
 from minakanushi.training.objectives import compute_objectives
 from minakanushi.utils.seed import seed_everything
 from minakanushi.utils.tensors import assert_finite, resolve_device, resolve_dtype
@@ -231,6 +231,7 @@ class Trainer:
             intra_branch_xy=intra_b,
             latent=pred.latent_state,
             training=train,
+            unobserved_mask=(pred.age_unobserved > 0) & pred.occupied,
         )
         assert_finite("loss.total", breakdown.total)
         return UnrollPacket(
@@ -283,8 +284,14 @@ class Trainer:
         zeros = torch.zeros_like(pkt.writes)
         with torch.no_grad():
             _, _, core_off = self._core_step(pkt.packed_n, pkt.pred, live_writes=zeros)
-        occ = pkt.pred_n.occupied.to(pkt.pred_n.entity_xy.dtype).unsqueeze(-1)
-        mem_delta = float((((pkt.pred_n.entity_xy - core_off.world_state.entity_xy).pow(2) * occ).mean()).detach())
+        mem_slots = pkt.mem_mask if bool(pkt.mem_mask.any()) else pkt.pred_n.occupied
+        mem_delta = float(
+            memory_effect_delta(
+                pkt.pred_n.latent_state,
+                core_off.world_state.latent_state,
+                mem_slots,
+            ).detach()
+        )
         primary = [t for t in pkt.trajs if t.strategy_id == pkt.trajs[0].strategy_id]
         branch_xy = torch.stack([t.states_xy for t in primary], dim=0)
         true_term = pkt.true_future[0, -1]
