@@ -1,6 +1,18 @@
 # WorldState
 
-WorldState is a belief about reality, not a copy of the current observation.
+WorldState is a probabilistic belief about reality, not a copy of the current
+observation and not a hidden embedding only.
+
+Native target:
+
+```text
+B_t = F(B_{t-1}, O_t, M_t, P_t, U_t)
+```
+
+`latent_state` carries the learned hypothesis. Belief also includes identity,
+kinematics, confidence, typed uncertainty, occupancy, and age_unobserved.
+A world model that predicts only `future_xy` or the next image is the wrong
+object.
 
 Tensors (batch B, slots N, dim D, uncertainty channels U):
 

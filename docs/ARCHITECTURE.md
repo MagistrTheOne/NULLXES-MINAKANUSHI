@@ -55,3 +55,32 @@ token attention and is not RoPE.
 
 Checkpoint and config identity is `architecture=MINAKANUSHI`,
 `organization=NULLXES`, `native_runtime=nullxes`. No chat template.
+No “I AM MINAKANUSHI” language objective. Self-knowledge is a structured
+SelfModel (passport + embodiment + authority), not a network that classifies
+identity. See `docs/GATE_03_PRE_WORLD_MODEL.md`.
+
+## Belief
+
+World update is `B_t = F(B_{t-1}, O_t, M_t, P_t, U_t)`. `B_t` is a
+probabilistic belief state, not a hidden embedding only. `latent_state` is
+the learned carrier; identity, kinematics, confidence, typed uncertainty,
+and persistence are part of the belief.
+
+## Authority
+
+Authority changes decision permission. It does not erase world understanding
+and does not bypass the constraint kernel. `policy_enabled=false` keeps
+perception, memory, futures, and risk estimation on; autonomous ActionPolicy
+select goes off (fail-closed SAFE_HOLD).
+
+## Gates
+
+| Gate | Status |
+|---:|---|
+| 02 | closed (loop, grads, checkpoint, runtime) |
+| 03 | synthetic curriculum + generalization + adversarial reality — next |
+| 04 | SelfModel + Authority + operator modes (structured, not a net) |
+| 05 | world belief objectives |
+| 06 | memory / uncertainty validation |
+| 07 | `gpu_train_v01` scaling |
+| 08 | H100/H200 preparation |

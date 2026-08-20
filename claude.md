@@ -1900,6 +1900,14 @@ MINAKANUSHI != CHATBOT
 MINAKANUSHI != WRAPPER
 
 MINAKANUSHI != EXISTING FOUNDATION MODEL
+
+BELIEF IS PROBABILISTIC WORLD STATE, NOT A LATENT BAG
+
+AUTHORITY GATES ACTION, NOT COGNITION
+
+SELFMODEL IS PASSPORT + EMBODIMENT, NOT A NETWORK
+
+POLICY OFF DOES NOT MEAN BRAIN OFF
 ```
 
 ---
@@ -1942,3 +1950,25 @@ NULLXES MINAKANUSHI
 **I WILL SURVIVE.**
 
 **GO GO GO GO — NULLXES.**
+
+---
+
+# 41. GATE LOCK — 03 / PRE-WORLD MODEL
+
+Gate 02 is closed. Do not start world-model scale training.
+
+Next executable gate is Gate 03: synthetic curriculum, held-out generalization,
+and Adversarial Reality Check (belief correction + sensor/memory conflict,
+not blind averaging).
+
+SelfModel, when implemented (Gate 04), is structured passport state
+(identity, capabilities, embodiment, authority, runtime). Never a
+SelfModel Transformer, Identity Head, or “I AM MINAKANUSHI” text objective.
+
+Authority changes decision permission. It does not erase world understanding
+and does not bypass hard constraints. `policy_enabled=false` is cognition on,
+autonomous selection off.
+
+`B_t` is a probabilistic belief state, not a hidden embedding only.
+
+Canonical lock: `docs/GATE_03_PRE_WORLD_MODEL.md`.

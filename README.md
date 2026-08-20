@@ -85,3 +85,6 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/MEMORY.md`
 - `docs/TRAINING.md`
 - `docs/CONSTRAINTS.md`
+- `docs/GATE_03_PRE_WORLD_MODEL.md` — approved lock: belief target, SelfModel
+  as passport not network, authority gates action not cognition
+- `docs/PRETRAINING_GATE_01.md`

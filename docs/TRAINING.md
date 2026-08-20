@@ -33,9 +33,15 @@ runtime.
 | 1 | `configs/training/stage1_world.yaml` | observation → WorldState |
 | 2 | `configs/training/stage2_temporal.yaml` | S_t → S_{t+1} and futures |
 
+Gate 03 (next, after Gate 02 close): held-out synthetic curriculum plus
+adversarial reality checks (belief correction, conflict vs blind average).
+Do not redefine the world model as `image → next image` or `state → future_xy`.
+Do not start `gpu_train_v01` / `research_v01` as Gate 03.
+
 Later stages (memory stress, OOD uncertainty, strategy ranking, adversarial
 constraints, closed-loop, physical integration) are specified but not yet
-active YAML.
+active YAML. SelfModel / Authority implementation is Gate 04, structured
+state only — no identity network. See `docs/GATE_03_PRE_WORLD_MODEL.md`.
 
 ## Checkpoint
 
