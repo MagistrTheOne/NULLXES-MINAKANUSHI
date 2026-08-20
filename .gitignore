@@ -14,6 +14,7 @@ htmlcov/
 experiments/
 outputs/
 logs/
+dataset/
 *.mina
 *.pt
 *.pth

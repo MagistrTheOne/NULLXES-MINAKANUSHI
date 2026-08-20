@@ -107,6 +107,7 @@ class SyntheticWorld:
                 "vel": (float(b.vel[0]), float(b.vel[1])),
             }
             for b in bodies
+            if b.body_id not in self.removed_ids
         }
 
     def _velocity_from_intent(self, intent: ActionIntent) -> np.ndarray:

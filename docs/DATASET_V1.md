@@ -52,3 +52,7 @@ python scripts/generate_dataset.py --root dataset --n 4 --length 8
 
 `belief_states` are teacher visibility confidences (inspectable). MINA
 posterior tensors are filled by a closed-loop recorder, not by this writer.
+
+`occlusion` events are in-range unseen bodies (hidden or line-of-sight).
+Bodies beyond `sensor_range` are `out_of_range`, not occlusion.
+`gone_forever` removes the entity from ground truth and emits `disappearance`.

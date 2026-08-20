@@ -52,6 +52,31 @@ def test_08_5b_inspector_shows_time_action_reality() -> None:
     assert "REALITY:" in text
     assert "Correction:" in text
     assert rec["scenario"] in text
+    rec_cv = episode_to_record(generate_episode(sim, seed=4, episode_index=0, length=6, scenario="const_velocity"))
+    occluded_obs = sum(1 for obs in rec_cv["observations"] if obs.get("occluded_ids"))
+    occlusion_events = [e for e in rec_cv["events"] if e["type"] == "occlusion"]
+    oor_events = [e for e in rec_cv["events"] if e["type"] == "out_of_range"]
+    assert occluded_obs > 0
+    assert oor_events
+    assert len(occlusion_events) < occluded_obs
+    for block in format_episode(rec_cv, max_frames=6).split("TIME ")[1:]:
+        note = block.split("Correction:")[1].splitlines()[1].strip()
+        assert note != "out_of_range"
+
+
+def test_08_5_gone_forever_emits_disappearance() -> None:
+    sim = cpu_config().simulation
+    rec = episode_to_record(generate_episode(sim, seed=4, episode_index=0, length=8, scenario="gone_forever"))
+    kinds = [e["type"] for e in rec["events"]]
+    assert "disappearance" in kinds
+    gone = next(e for e in rec["events"] if e["type"] == "disappearance")
+    assert gone["frame"] == 3
+    assert gone["ids"]
+    text = format_episode(rec, max_frames=8)
+    assert "disappearance" in text
+    assert rec["world_states"][2]["entity_id"] != rec["world_states"][3]["entity_id"]
+    lost = set(rec["world_states"][2]["entity_id"]) - set(rec["world_states"][3]["entity_id"])
+    assert lost
 
 
 def test_08_5c_balance_not_constant_velocity_only(tmp_path) -> None:

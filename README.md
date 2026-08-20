@@ -14,6 +14,17 @@ native_runtime: nullxes
 architecture_version: 0.1
 ```
 
+## Clean install
+
+```text
+python -m pip install -e ".[test]"
+python -m pytest tests
+python scripts/generate_dataset.py --root dataset --n 4 --length 8
+```
+
+CPU only. Do not instantiate `research_v01`. Checkpoints are `*.mina` and are
+not committed.
+
 ## What exists now (Milestone 1 foundation)
 
 Implemented and wired into one closed loop:
@@ -94,6 +105,7 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/GATE_07_FOCUS.md` — Focus Engine / internal attention (not desire)
 - `docs/GATE_08_WORLD_MODEL.md` — Belief(t)+Action → Belief(t+1)
 - `docs/GATE_08_5_DATASET.md` — Dataset Reality Check (not Gate 09)
+- `docs/GATE_09_RUNTIME.md` — Autonomous Runtime (`cycle()`, RuntimeState)
 - `docs/DATASET_V1.md` — SyntheticWorld dataset contract
 - `docs/RUNPOD.md` — GPU pipeline order (not started)
 - `docs/PRETRAINING_GATE_01.md`

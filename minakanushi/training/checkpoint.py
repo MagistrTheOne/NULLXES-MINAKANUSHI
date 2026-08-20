@@ -61,6 +61,7 @@ def build_manifest(config: ArchitectureConfig, extras: dict | None = None) -> di
             "constraint_kernel": True,
             "self_model": True,
             "authority": True,
+            "runtime": True,
         },
     }
     if extras:
@@ -74,6 +75,7 @@ def save_mina(
     *,
     optimizer: Optimizer | None = None,
     extras: dict | None = None,
+    tensors: dict | None = None,
 ) -> Path:
     path = Path(path)
     if path.suffix != ".mina":
@@ -84,6 +86,7 @@ def save_mina(
         "system": system.state_dict(),
         "parameter_report": system.parameter_report(),
         "optimizer": optimizer.state_dict() if optimizer is not None else None,
+        "runtime": tensors,
     }
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(MANIFEST_NAME, yaml.safe_dump(manifest, sort_keys=False))
@@ -112,7 +115,8 @@ def load_mina(
     system: MinakanushiSystem,
     *,
     optimizer: Optimizer | None = None,
-) -> dict:
+    return_payload: bool = False,
+) -> dict | tuple[dict, dict]:
     path = Path(path)
     cfg = system.config
     with zipfile.ZipFile(path, "r") as zf:
@@ -141,6 +145,8 @@ def load_mina(
         if payload.get("optimizer") is None:
             raise ValueError("checkpoint has no optimizer state; refusing silent resume")
         optimizer.load_state_dict(payload["optimizer"])
+    if return_payload:
+        return manifest, payload
     return manifest
 
 

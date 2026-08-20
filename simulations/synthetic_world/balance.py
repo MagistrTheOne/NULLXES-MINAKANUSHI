@@ -46,7 +46,6 @@ def tally_records(records: list[dict[str, Any]]) -> BalanceReport:
             if kind == "conflict":
                 conflicts += 1
         corrections += len(rec.get("corrections", []))
-        occlusions += sum(1 for obs in rec.get("observations", []) if obs.get("occluded_ids"))
     return BalanceReport(
         scenario_count=dict(scenarios),
         event_count=events,

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from minakanushi.architecture.config import load_config
 from minakanushi.policy.intent import ActionIntent
-from minakanushi.runtime.engine import MinakanushiEngine
+from minakanushi.runtime.loop import MinakanushiRuntime
 from simulations.synthetic_world.world import SyntheticWorld
 
 
@@ -28,17 +28,12 @@ def simulate(root: Path, steps: int) -> dict:
         runtime_path=root / "configs" / "runtime" / "cpu.yaml",
         simulation_path=root / "configs" / "simulation" / "milestone1.yaml",
     )
-    engine = MinakanushiEngine(config)
-    world = SyntheticWorld(config.simulation, seed=config.runtime.seed)
-    state = engine.initialize()
+    runtime = MinakanushiRuntime(config)
     cycles = []
     agent_path = []
     for _ in range(steps):
-        obs = world.observe()
-        before = obs.agent_xy
-        result = engine.step(obs, state)
-        state = result.state
-        world.step(result.action_intent)
+        before = tuple(float(x) for x in runtime.platform.world.agent.xy)
+        result = runtime.cycle()
         tel = result.telemetry
         rec = {
             "cycle_id": tel.cycle_id,
@@ -54,12 +49,13 @@ def simulate(root: Path, steps: int) -> dict:
             "selected_strategy": tel.selected_strategy,
             "ActionIntent": _intent_record(result.action_intent),
             "agent_xy_before": list(before),
-            "agent_xy_after_step": list(world.agent.xy),
+            "agent_xy_after_step": [float(x) for x in runtime.platform.world.agent.xy],
             "observation_count": tel.observation_count,
             "latency_ms": tel.latency_ms,
+            "runtime_mode": result.runtime.mode,
         }
         cycles.append(rec)
-        agent_path.append(tuple(float(x) for x in world.agent.xy))
+        agent_path.append(tuple(float(x) for x in runtime.platform.world.agent.xy))
         print(json.dumps(rec, ensure_ascii=True), flush=True)
 
     # Proof: ActionIntent is applied to the world. Same seed, forced MOVE_TO

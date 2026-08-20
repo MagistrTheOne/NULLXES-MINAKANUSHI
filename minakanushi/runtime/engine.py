@@ -183,6 +183,7 @@ class MinakanushiEngine:
         futures = self.system.future.predict(world, candidates)
         by_id = group_by_strategy(futures)
         allowed, rejected, audits = self.constraints.filter(candidates, by_id)
+        proposal = self.policy.select(allowed, by_id, self._goal(sit), observations.timestamp)
         intent = authority.resolve(
             self.policy,
             allowed,
@@ -223,6 +224,9 @@ class MinakanushiEngine:
                 "focus_type": focus.focus_type,
                 "focus_target": focus.target_id,
                 "action_outcomes": len(self_model.action_outcomes.records),
+                "strategy_proposal": proposal.strategy_id,
+                "strategy_proposal_objective": proposal.objective,
+                "authority_block": str(intent.provenance).startswith("authority."),
             },
         )
         self.telemetry.emit(telemetry)

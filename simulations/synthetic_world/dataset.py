@@ -65,6 +65,7 @@ class Episode:
     observations: list[Observation]
     truth: list[FrameTruth]
     dt: float
+    sensor_range: float
 
 
 def _intent(name: str, xy: tuple[float, float]) -> ActionIntent:
@@ -84,6 +85,8 @@ def _future_table(world: SyntheticWorld, horizon: int) -> dict[int, np.ndarray]:
     bodies = [world.agent, *world.movers, *world.obstacles, *world.targets]
     table = {}
     for body in bodies:
+        if body.body_id in world.removed_ids:
+            continue
         path = np.zeros((horizon, 2), dtype=np.float64)
         xy = body.xy.copy()
         vel = body.vel.copy()
@@ -249,6 +252,7 @@ def generate_episode(
         observations=frames_obs,
         truth=frames_gt,
         dt=config.dt,
+        sensor_range=float(config.sensor_range),
     )
 
 

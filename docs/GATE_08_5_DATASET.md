@@ -52,7 +52,11 @@ A split is rejected as collapsed if `const_velocity ≥ 90%` of episodes.
 python scripts/dataset_balance.py dataset
 ```
 
-## 08.5D Causal sanity
+## Event taxonomy
+
+`occlusion` = in-range and unseen (hidden or blocked).
+`out_of_range` = beyond sensor range. Not a correction.
+`disappearance` = entity left ground truth (`gone_forever`).
 
 Same world seed and initial placement. Episode 1: `WAIT`. Episode 2:
 `MOVE_TO`. Agent trajectories must diverge. A distant non-interacting
@@ -62,7 +66,8 @@ This is teacher-world causality. MINA `predict_belief` causality is Gate 08.
 
 ## Not this gate
 
-Persistent `RuntimeState`, `cycle()`, checkpoint restore, policy modes
-AUTONOMOUS/ADVISORY/MANUAL/SAFE_HOLD as a live process — that is Gate 09.
+Persistent `RuntimeState`, `cycle()`, checkpoint restore loop — Gate 09.
+See `docs/GATE_09_RUNTIME.md`.
 
-Do not tag `MINAKANUSHI-v0.1-foundation`. Do not start RunPod.
+Do not tag `MINAKANUSHI-v0.1-foundation` until Gate 09 is accepted.
+Do not start RunPod.

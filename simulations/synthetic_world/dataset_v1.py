@@ -24,19 +24,41 @@ SPLIT_SCENARIOS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _xy_of(truth, eid: int) -> np.ndarray | None:
+    for i, item in enumerate(truth.entity_id):
+        if int(item) == int(eid):
+            return np.asarray(truth.xy[i], dtype=np.float64)
+    return None
+
+
 def _events_for_frame(episode: Episode, t: int) -> list[dict]:
     truth = episode.truth[t]
     prev = episode.truth[t - 1] if t > 0 else None
     events: list[dict] = []
-    if truth.occluded_ids:
-        events.append({"frame": t, "type": "occlusion", "ids": [int(i) for i in truth.occluded_ids]})
+    agent_xy = _xy_of(truth, 1)
+    occlusion_ids: list[int] = []
+    out_of_range_ids: list[int] = []
+    if agent_xy is not None:
+        for eid in truth.occluded_ids:
+            pos = _xy_of(truth, int(eid))
+            if pos is None:
+                continue
+            dist = float(np.linalg.norm(pos - agent_xy))
+            if dist > float(episode.sensor_range) + 1e-9:
+                out_of_range_ids.append(int(eid))
+            else:
+                occlusion_ids.append(int(eid))
+    if occlusion_ids:
+        events.append({"frame": t, "type": "occlusion", "ids": occlusion_ids})
+    if out_of_range_ids:
+        events.append({"frame": t, "type": "out_of_range", "ids": out_of_range_ids})
     if prev is not None:
-        lost = set(prev.entity_id) - set(truth.entity_id)
-        gained = set(truth.entity_id) - set(prev.entity_id)
+        lost = set(int(i) for i in prev.entity_id) - set(int(i) for i in truth.entity_id)
+        gained = set(int(i) for i in truth.entity_id) - set(int(i) for i in prev.entity_id)
         if lost:
-            events.append({"frame": t, "type": "disappearance", "ids": sorted(int(i) for i in lost)})
+            events.append({"frame": t, "type": "disappearance", "ids": sorted(lost)})
         if gained:
-            events.append({"frame": t, "type": "appearance", "ids": sorted(int(i) for i in gained)})
+            events.append({"frame": t, "type": "appearance", "ids": sorted(gained)})
         if episode.scenario == "conflict" and t >= 4:
             events.append({"frame": t, "type": "conflict", "ids": [int(i) for i in truth.entity_id if i != 1]})
         if episode.scenario == "turn" and t == len(episode.truth) // 2:
