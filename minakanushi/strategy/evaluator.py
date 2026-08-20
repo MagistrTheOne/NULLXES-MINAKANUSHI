@@ -14,4 +14,5 @@ def evaluate_value(candidate: StrategyCandidate, trajectory: FutureTrajectory | 
     gx = float(goal_xy[0]) - float(terminal_agent[0].item())
     gy = float(goal_xy[1]) - float(terminal_agent[1].item())
     dist = (gx * gx + gy * gy) ** 0.5
-    return -dist - 0.5 * candidate.predicted_risk - 0.25 * float(trajectory.uncertainty)
+    uncertainty = float(trajectory.uncertainty.detach().item())
+    return -dist - 0.5 * candidate.predicted_risk - 0.25 * uncertainty

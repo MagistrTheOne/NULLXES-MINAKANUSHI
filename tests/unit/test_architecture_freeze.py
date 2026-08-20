@@ -74,6 +74,17 @@ def test_sanity_yaml_is_fsdp2_bf16() -> None:
     assert train.checkpoint_every == train.steps
 
 
+def test_status_core_yaml_is_fsdp2_bf16_final_checkpoint() -> None:
+    arch = load_architecture(ROOT / "configs" / "architecture" / "minakanushi_6_8b.yaml")
+    train = load_training(ROOT / "configs" / "training" / "mina_6_8b_status_core_researched.yaml")
+    plan = plan_from_training(arch, train)
+    assert train.dataset_name == "NULLXES MINAKANUSHI 6.8B Status Core (Researched)"
+    assert plan.parallelism == "fsdp2_zero3"
+    assert plan.precision == "bf16"
+    assert plan.activation_checkpoint is False
+    assert train.checkpoint_every == train.steps
+
+
 def test_fp16_is_forbidden_for_6_8b() -> None:
     arch = load_architecture(ROOT / "configs" / "architecture" / "minakanushi_6_8b.yaml")
     train = replace(load_training(ROOT / "configs" / "training" / "mina_6_8b_sanity.yaml"), precision="fp16")
