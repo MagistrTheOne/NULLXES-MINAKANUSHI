@@ -77,10 +77,11 @@ class FutureEngine(nn.Module):
                 xy = snapshot.entity_xy.clone()
                 vel = snapshot.entity_vel.clone()
                 frames = []
-                agent_vel = action_vec
+                agent_vel = action_vec[:, :2]
+                agent_mask = torch.zeros(vel.shape[0], vel.shape[1], 1, device=vel.device, dtype=torch.bool)
+                agent_mask[:, AGENT_SLOT] = True
                 for _ in range(horizon):
-                    vel = vel.clone()
-                    vel[:, AGENT_SLOT] = agent_vel
+                    vel = torch.where(agent_mask, agent_vel.unsqueeze(1), vel)
                     residual = self.residual(cond)
                     xy = xy + vel * dt + residual * snapshot.occupied.unsqueeze(-1).to(xy.dtype)
                     frames.append(xy.clone())
@@ -104,6 +105,7 @@ class FutureEngine(nn.Module):
                         strategy_id=strategy.strategy_id,
                         branch_id=k,
                         horizon_steps=horizon,
+                        branch_logit=logit_t[0, k],
                     )
                 )
 

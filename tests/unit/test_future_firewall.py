@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from minakanushi.strategy.candidate import StrategyCandidate
-from tests.conftest import build_engine
+from helpers import build_engine
 from simulations.synthetic_world.world import SyntheticWorld
 
 

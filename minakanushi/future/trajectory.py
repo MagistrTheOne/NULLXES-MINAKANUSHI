@@ -23,3 +23,4 @@ class FutureTrajectory:
     strategy_id: str
     branch_id: int
     horizon_steps: int
+    branch_logit: Tensor | None = None

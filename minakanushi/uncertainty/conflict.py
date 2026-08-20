@@ -24,5 +24,8 @@ def conflict_score(world: WorldState, units: MinaUnitBatch) -> Tensor:
             predicted = world.entity_xy[b, slot]
             observed = units.spatial_position[b, i, :2]
             dist = torch.linalg.vector_norm(predicted - observed)
-            scores[b, slot] = torch.clamp(dist / 2.0, 0.0, 1.0)
+            value = torch.clamp(dist / 2.0, 0.0, 1.0)
+            sel = torch.zeros_like(scores, dtype=torch.bool)
+            sel[b, slot] = True
+            scores = torch.where(sel, value.expand_as(scores), scores)
     return scores

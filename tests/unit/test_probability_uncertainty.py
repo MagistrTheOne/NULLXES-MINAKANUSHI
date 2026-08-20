@@ -6,7 +6,7 @@ import torch
 
 from minakanushi.future.engine import group_by_strategy
 from minakanushi.strategy.candidate import StrategyCandidate
-from tests.conftest import build_engine
+from helpers import build_engine
 from simulations.synthetic_world.world import SyntheticWorld
 
 

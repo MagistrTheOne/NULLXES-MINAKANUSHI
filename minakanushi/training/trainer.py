@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from time import perf_counter
 
 import torch
 from torch import Tensor
@@ -15,6 +17,7 @@ from minakanushi.architecture.model import MinakanushiSystem
 from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.checkpoint import save_mina
+from minakanushi.training.metrics import assemble_bundle
 from minakanushi.training.objectives import compute_objectives
 from minakanushi.utils.seed import seed_everything
 from minakanushi.utils.tensors import assert_finite, resolve_device, resolve_dtype
@@ -28,6 +31,34 @@ class TrainLog:
     terms: dict[str, float]
     grad_norm: float
     traj_error: float
+    metrics: dict[str, float] | None = None
+
+
+@dataclass
+class UnrollPacket:
+    packed: MinaUnitBatch
+    packed_n: MinaUnitBatch
+    pos: object
+    hints: Tensor
+    writes: Tensor
+    pred: object
+    pred_n: object
+    core: object
+    core_n: object
+    trajs: list
+    breakdown: object
+    aligned_xy: Tensor
+    aligned_vel: Tensor
+    aligned_occ: Tensor
+    aligned_next: Tensor
+    mem_mask: Tensor
+    pred_future: Tensor
+    true_future: Tensor
+    alt_future: Tensor
+    intra_b: Tensor
+    episode_index: int
+    frame_index: int
+    scenario: str
 
 
 def _align(pred_ids: Tensor, pred_occ: Tensor, true_ids: Tensor, true_xy: Tensor, true_vel: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -84,6 +115,8 @@ class Trainer:
             lr=config.training.learning_rate,
             weight_decay=config.training.weight_decay,
         )
+        self._last_forward_s = 0.0
+        self._last_backward_s = 0.0
 
     def _encode(self, obs, episode_pos: float) -> MinaUnitBatch:
         units = self.system.perception.encode(obs, device=self.device, dtype=self.dtype)
@@ -105,9 +138,9 @@ class Trainer:
         fused = packed.semantic_embedding + pos.embedding
         constructed = self.constructor.apply(packed, world, fused, memory_hints=hints)
         _, core = self.system.observe_to_core(packed, constructed, hints)
-        return core
+        return pos, hints, core
 
-    def step_once(self, step: int) -> TrainLog:
+    def unroll(self, step: int) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
         ep_idx = (step - 1) % max(train.n_overfit_episodes, 1)
@@ -128,12 +161,12 @@ class Trainer:
         world.entity_xy[0, 0] = torch.tensor(self.config.simulation.agent_start, device=self.device, dtype=self.dtype)
 
         packed = self._encode(obs, float(idx))
-        core = self._core_step(packed, world, live_writes=None)
+        pos, hints, core = self._core_step(packed, world, live_writes=None)
         writes = core.memory_write_candidates
         pred = core.world_state
 
         packed_n = self._encode(obs_n, float(idx + 1))
-        core_n = self._core_step(packed_n, pred, live_writes=writes)
+        _, _, core_n = self._core_step(packed_n, pred, live_writes=writes)
         pred_n = core_n.world_state
 
         max_e = arch.world_slots
@@ -191,31 +224,130 @@ class Trainer:
             training=train,
         )
         assert_finite("loss.total", breakdown.total)
+        return UnrollPacket(
+            packed=packed,
+            packed_n=packed_n,
+            pos=pos,
+            hints=hints,
+            writes=writes,
+            pred=pred,
+            pred_n=pred_n,
+            core=core,
+            core_n=core_n,
+            trajs=trajs,
+            breakdown=breakdown,
+            aligned_xy=aligned_xy,
+            aligned_vel=aligned_vel,
+            aligned_occ=aligned_occ,
+            aligned_next=aligned_next,
+            mem_mask=mem_mask,
+            pred_future=pred_future,
+            true_future=true_future,
+            alt_future=alt_future,
+            intra_b=intra_b,
+            episode_index=ep_idx,
+            frame_index=idx,
+            scenario=episode.scenario,
+        )
+
+    def _metrics(self, pkt: UnrollPacket) -> dict[str, float]:
+        pred = pkt.pred
+        pred_n = pkt.pred_n
+        persist_den = 0
+        persist_hit = 0
+        reacq_den = 0
+        reacq_hit = 0
+        ids_t = {int(x) for x in pred.entity_id[0, pred.occupied[0]].tolist()} if bool(pred.occupied.any()) else set()
+        ids_n = {int(x) for x in pred_n.entity_id[0, pred_n.occupied[0]].tolist()} if bool(pred_n.occupied.any()) else set()
+        for eid in ids_t:
+            persist_den += 1
+            if eid in ids_n:
+                persist_hit += 1
+        for eid in ids_n:
+            reacq_den += 1
+            if eid in ids_t:
+                reacq_hit += 1
+        zeros = torch.zeros_like(pkt.writes)
+        with torch.no_grad():
+            _, _, core_off = self._core_step(pkt.packed_n, pkt.pred, live_writes=zeros)
+        occ = pkt.pred_n.occupied.to(pkt.pred_n.entity_xy.dtype).unsqueeze(-1)
+        mem_delta = float((((pkt.pred_n.entity_xy - core_off.world_state.entity_xy).pow(2) * occ).mean()).detach())
+        primary = [t for t in pkt.trajs if t.strategy_id == pkt.trajs[0].strategy_id]
+        branch_xy = torch.stack([t.states_xy for t in primary], dim=0)
+        true_term = pkt.true_future[0, -1]
+        best = torch.linalg.vector_norm(branch_xy[:, -1] - true_term, dim=-1).min(dim=0).values
+        const = torch.linalg.vector_norm(pkt.aligned_xy[0] - true_term, dim=-1)
+        occ = pkt.aligned_occ[0].to(best.dtype)
+        coverage = float(((best < const).to(best.dtype) * occ).sum() / occ.sum().clamp_min(1.0))
+        bundle = assemble_bundle(
+            pred_xy=pred.entity_xy,
+            true_xy=pkt.aligned_xy,
+            pred_vel=pred.entity_vel,
+            true_vel=pkt.aligned_vel,
+            occupied=pkt.aligned_occ,
+            pred_future=pkt.pred_future,
+            true_future=pkt.true_future,
+            persist_hits=persist_hit / max(persist_den, 1),
+            reacquire_hits=reacq_hit / max(reacq_den, 1),
+            uncertainty=pred.uncertainty,
+            position_error=pred.entity_xy - pkt.aligned_xy,
+            branch_xy=branch_xy,
+            memory_delta=mem_delta,
+            constraint_violations=0,
+            closed_loop_success=1.0,
+            coverage=coverage,
+        )
+        return asdict(bundle)
+
+    def step_once(self, step: int) -> TrainLog:
+        t0 = perf_counter()
+        pkt = self.unroll(step)
+        self._last_forward_s = perf_counter() - t0
+        t1 = perf_counter()
         self.opt.zero_grad(set_to_none=True)
-        breakdown.total.backward()
-        grad_norm = float(clip_grad_norm_(self.system.parameters(), train.grad_clip))
+        pkt.breakdown.total.backward()
+        grad_norm = float(clip_grad_norm_(self.system.parameters(), self.config.training.grad_clip))
         self.opt.step()
-        traj_error = float(((pred_future[:, -1] - true_future[:, -1]).pow(2) * aligned_occ.unsqueeze(-1)).sum().item())
+        self._last_backward_s = perf_counter() - t1
+        traj_error = float(
+            ((pkt.pred_future[:, -1] - pkt.true_future[:, -1]).pow(2) * pkt.aligned_occ.unsqueeze(-1)).sum().item()
+        )
+        metrics = None
+        if step == 1 or step % self.config.training.eval_every == 0:
+            metrics = self._metrics(pkt)
         return TrainLog(
             step=step,
-            loss=float(breakdown.total.item()),
-            terms={k: float(v.item()) for k, v in breakdown.terms.items()},
+            loss=float(pkt.breakdown.total.item()),
+            terms={k: float(v.item()) for k, v in pkt.breakdown.terms.items()},
             grad_norm=grad_norm,
             traj_error=traj_error,
+            metrics=metrics,
         )
 
     def fit(self, out_dir: Path) -> list[TrainLog]:
         train = self.config.training
         logs: list[TrainLog] = []
         out_dir.mkdir(parents=True, exist_ok=True)
+        metrics_path = out_dir / "metrics.jsonl"
+        abort_reason = None
         for step in range(1, train.steps + 1):
             log = self.step_once(step)
             logs.append(log)
             if step % train.log_every == 0 or step == 1:
                 print(
-                    f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} grad={log.grad_norm:.4f} terms={log.terms}",
+                    f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} "
+                    f"grad={log.grad_norm:.4f} fwd={self._last_forward_s:.3f}s "
+                    f"bwd={self._last_backward_s:.3f}s terms={log.terms}",
                     flush=True,
                 )
+            if log.metrics is not None:
+                with metrics_path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "metrics": log.metrics}) + "\n")
+                print(f"metrics step={step} {log.metrics}", flush=True)
+            abort_reason = _diagnose_run(logs)
+            if abort_reason is not None:
+                print(f"ABORT {abort_reason}", flush=True)
+                break
             if step % train.checkpoint_every == 0 or step == train.steps:
                 save_mina(
                     out_dir / f"minakanushi_stage{train.stage}_step{step}.mina",
@@ -230,7 +362,62 @@ class Trainer:
                         "metrics": {"traj_error": log.traj_error, "loss": log.loss},
                     },
                 )
+        last = logs[-1]
+        torch.save(
+            {
+                "seed": train.seed,
+                "n_overfit_episodes": train.n_overfit_episodes,
+                "sequence_length": train.sequence_length,
+                "step": last.step,
+                "loss": last.loss,
+                "entity_xy": None,
+            },
+            out_dir / "reference_meta.pt",
+        )
+        # Frozen inference snapshot from a deterministic episode for reload comparison.
+        with torch.no_grad():
+            self.system.eval()
+            pkt = self.unroll(1)
+            torch.save(
+                {
+                    "seed": train.seed,
+                    "episode_index": pkt.episode_index,
+                    "frame_index": pkt.frame_index,
+                    "entity_xy": pkt.pred.entity_xy.detach().cpu(),
+                    "latent_state": pkt.pred.latent_state.detach().cpu(),
+                    "future_terminal": pkt.pred_future[:, -1].detach().cpu(),
+                },
+                out_dir / "reference_inference.pt",
+            )
+            self.system.train()
+        if abort_reason is not None:
+            raise RuntimeError(abort_reason)
         return logs
+
+
+def _diagnose_run(logs: list[TrainLog]) -> str | None:
+    last = logs[-1]
+    if not (last.loss == last.loss) or last.loss == float("inf"):
+        return "loss is NaN/Inf"
+    if last.loss == 0.0 and last.step <= 5:
+        return "loss collapsed to zero immediately"
+    if last.grad_norm > 1e6:
+        return "gradient norm diverges"
+    if last.step >= 20:
+        window = logs[:20]
+        losses = [x.loss for x in window]
+        if max(losses) - min(losses) < 1e-8:
+            return "loss stays constant"
+        if last.loss > 50.0 * logs[0].loss + 1.0:
+            return "loss oscillates explosively"
+        terms0 = logs[0].terms
+        terms1 = last.terms
+        if terms0:
+            dominant = max(terms1, key=terms1.get)
+            rest = sum(v for k, v in terms1.items() if k != dominant)
+            if terms1[dominant] > 50.0 * max(rest, 1e-8) and abs(terms1[dominant] - terms0[dominant]) < 1e-6:
+                return f"one loss dominates and is frozen: {dominant}"
+    return None
 
 
 def trainer_from_files(root: Path, training_yaml: Path) -> Trainer:

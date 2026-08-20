@@ -7,7 +7,7 @@ import torch
 from minakanushi.architecture.config import load_architecture
 from minakanushi.architecture.mina_unit import MinaUnit, pack_units
 from minakanushi.state.constructor import StateConstructor, empty_world_state
-from tests.conftest import ROOT
+from helpers import ROOT
 
 
 def test_later_evidence_corrects_position() -> None:

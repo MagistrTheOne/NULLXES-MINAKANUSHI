@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from tests.conftest import build_engine
+from helpers import build_engine
 from simulations.synthetic_world.world import SyntheticWorld
 
 

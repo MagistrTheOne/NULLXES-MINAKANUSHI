@@ -8,7 +8,7 @@ from minakanushi.architecture.config import load_architecture
 from minakanushi.architecture.mina_unit import MinaUnit, pack_units
 from minakanushi.architecture.model import MinakanushiSystem
 from minakanushi.state.constructor import StateConstructor, empty_world_state
-from tests.conftest import ROOT
+from helpers import ROOT
 
 
 def _unit(eid: int, x: float, t: float, dim: int) -> MinaUnit:

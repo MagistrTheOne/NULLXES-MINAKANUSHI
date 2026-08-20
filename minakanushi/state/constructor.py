@@ -70,15 +70,16 @@ class StateConstructor:
         assert_shape("previous.latent_state", previous.latent_state, (batch, n_slots, dim))
         assert_finite("positioned", positioned)
 
-        latent = previous.latent_state.clone()
-        xy = previous.entity_xy.clone()
-        vel = previous.entity_vel.clone()
+        latent = previous.latent_state
+        xy = previous.entity_xy
+        vel = previous.entity_vel
         occupied = previous.occupied.clone()
         entity_id = previous.entity_id.clone()
         kind = previous.kind.clone()
-        confidence = previous.confidence.clone()
-        uncertainty = previous.uncertainty.clone()
-        age = previous.age_unobserved.clone() + occupied.to(age.dtype)
+        confidence = previous.confidence
+        uncertainty = previous.uncertainty
+        was_occupied = occupied.clone()
+        age = previous.age_unobserved + was_occupied.to(dtype=previous.age_unobserved.dtype)
 
         updated = torch.zeros_like(occupied)
         for b in range(batch):
@@ -90,14 +91,16 @@ class StateConstructor:
                 occupied[b, slot] = True
                 entity_id[b, slot] = eid
                 kind[b, slot] = units.kind[b, i]
-                xy[b, slot] = units.spatial_position[b, i, :2]
-                # velocity is filled by DWC / kinematics; constructor writes evidence
-                latent[b, slot] = positioned[b, i]
-                confidence[b, slot] = units.confidence[b, i]
-                noise = units.uncertainty[b, i].clamp_min(0.0)
-                uncertainty[b, slot] = noise.expand_as(uncertainty[b, slot])
-                age[b, slot] = 0
-                updated[b, slot] = True
+                sel = torch.zeros_like(updated)
+                sel[b, slot] = True
+                sel_f = sel.unsqueeze(-1)
+                xy = torch.where(sel_f, units.spatial_position[b, i, :2].view(1, 1, 2).expand_as(xy), xy)
+                latent = torch.where(sel_f, positioned[b, i].view(1, 1, dim).expand_as(latent), latent)
+                confidence = torch.where(sel, units.confidence[b, i].expand_as(confidence), confidence)
+                noise = units.uncertainty[b, i].clamp_min(0.0).view(1, 1, 1).expand_as(uncertainty)
+                uncertainty = torch.where(sel_f, noise, uncertainty)
+                age = torch.where(sel, torch.zeros_like(age), age)
+                updated = updated | sel
 
         if memory_hints is not None:
             assert_shape("memory_hints", memory_hints, (batch, n_slots, dim))

@@ -25,5 +25,5 @@ include = ["minakanushi*", "simulations*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "tests"]
 addopts = "-q"

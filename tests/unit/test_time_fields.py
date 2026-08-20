@@ -7,7 +7,7 @@ import torch
 from minakanushi.architecture.config import load_architecture
 from minakanushi.architecture.mina_unit import MinaUnit, pack_units
 from minakanushi.position.field import NullxesPositionField
-from tests.conftest import ROOT
+from helpers import ROOT
 
 
 def test_event_time_is_not_arrival_time() -> None:

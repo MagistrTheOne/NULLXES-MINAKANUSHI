@@ -48,12 +48,12 @@ class UncertaintyEngine(nn.Module):
         missing = (world.age_unobserved > 0).to(learned.dtype)
         noisy = (1.0 - world.confidence).clamp(0.0, 1.0)
         conflict = conflict_score(world, units)
-        ood = (~world.occupied).to(learned.dtype) * 0.0
-        channels = learned.clone()
-        channels[..., 0] = torch.maximum(channels[..., 0], missing)
-        channels[..., 1] = torch.maximum(channels[..., 1], noisy)
-        channels[..., 2] = torch.maximum(channels[..., 2], conflict)
-        channels[..., 6] = torch.maximum(channels[..., 6], world.uncertainty.mean(dim=-1))
+        cols = [learned[..., i] for i in range(u)]
+        cols[0] = torch.maximum(cols[0], missing)
+        cols[1] = torch.maximum(cols[1], noisy)
+        cols[2] = torch.maximum(cols[2], conflict)
+        cols[6] = torch.maximum(cols[6], world.uncertainty.mean(dim=-1))
+        channels = torch.stack(cols, dim=-1)
         occupied = world.occupied.to(channels.dtype).unsqueeze(-1)
         channels = channels * occupied
         world.uncertainty = channels

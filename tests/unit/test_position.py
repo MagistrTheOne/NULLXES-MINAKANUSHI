@@ -8,7 +8,7 @@ from minakanushi.architecture.config import load_architecture
 from minakanushi.architecture.mina_unit import MinaUnit
 from minakanushi.architecture.mina_unit import pack_units
 from minakanushi.position.field import NullxesPositionField
-from tests.conftest import ROOT
+from helpers import ROOT
 
 
 def test_physical_time_changes_position_state() -> None:
