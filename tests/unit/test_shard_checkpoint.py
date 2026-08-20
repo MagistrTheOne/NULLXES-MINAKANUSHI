@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import zipfile
 
 import torch
 from torch import nn
@@ -49,6 +50,8 @@ def test_sharded_mina_resume_and_validation_restore(tmp_path: Path) -> None:
     assert payload["optimizer"] is not None
     for key, tensor in before.items():
         assert torch.equal(tensor, fresh.state_dict()[key])
+    with zipfile.ZipFile(path) as zf:
+        assert {info.compress_type for info in zf.infolist()} == {zipfile.ZIP_STORED}
 
 
 def test_save_mina_non_rank0_does_not_write_or_dump_state_dict(tmp_path, monkeypatch) -> None:

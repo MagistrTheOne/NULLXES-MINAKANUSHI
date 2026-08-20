@@ -134,7 +134,9 @@ def save_mina(
     if sharded:
         system_shards = split_tensor_map(payload["system"], int(shard_max_bytes))
         manifest["n_system_shards"] = len(system_shards)
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    # Tensor payloads are already dense binary blobs. Deflate burns CPU for
+    # minutes on 6.8B checkpoints and stalls the H200 sanity run after step 10.
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
         zf.writestr(MANIFEST_NAME, yaml.safe_dump(manifest, sort_keys=False))
         zf.writestr(CONFIG_NAME, yaml.safe_dump(asdict(system.config), sort_keys=False))
         zf.writestr("identity.json", _identity_json(extras))

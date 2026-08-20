@@ -71,6 +71,7 @@ def test_sanity_yaml_is_fsdp2_bf16() -> None:
     assert plan.precision == "bf16"
     assert plan.activation_checkpoint is False
     assert plan.cognition_budget == 4
+    assert train.checkpoint_every == train.steps
 
 
 def test_fp16_is_forbidden_for_6_8b() -> None:
