@@ -3,9 +3,14 @@
 ```text
 NULLXES MINAKANUSHI 6.8B
 short name: MINA
+HF: MagistrTheOne/MINAKANUSHI-6.8B
 ```
 
-**Status:** PRE-TRAIN GATE. Frozen at `7aba976`. Weights not in this folder.
+**Status:** Status Core (Researched). Hugging Face card: `HF_README.md`.
+
+Weights are not stored in git. The trained `*.mina` lives on Hugging Face:
+
+https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B
 
 ```text
 MINA
@@ -25,11 +30,12 @@ MINA
 | Config | `architecture.yaml` (copy of `configs/architecture/minakanushi_6_8b.yaml`) |
 | d / DWC / slots | 4096 / 32 / 512 world + 1024 memory |
 | Params (formula) | **6 799 130 646** |
-| Weights | not in this folder until a `*.mina` is trained |
+| Weights | Hugging Face `checkpoints/minakanushi_stage0_step64.mina` |
 | Spec | `docs/MINA_6_8B_TRAINING.md` |
+| Card | `models/MINA-6.8B/HF_README.md` |
 
 Do not `MinakanushiSystem(this)` on a laptop or the Stage A 6000 pod.
 
 Pilot package for Yunmu: runtime + this config + safety/authority docs +
-SyntheticWorld episodes. Trained 6.8B checkpoint is a later joint step
-(optional Warmcore finetune on NULLXES datasets).
+SyntheticWorld episodes. Warmcore finetune stays on NULLXES episode format.
+The architecture identity in the `*.mina` manifest does not change.

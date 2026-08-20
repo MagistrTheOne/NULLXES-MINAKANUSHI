@@ -46,7 +46,7 @@ evaluated before policy selection and cannot be overridden by value.
 
 | Profile | Path | latent | slots | depth | Role |
 |---|---|---:|---:|---:|---|
-| **minakanushi_6_8b** | `configs/architecture/minakanushi_6_8b.yaml` / `models/MINA-6.8B/` | 4096 | 512 | 32 | **Yunmu contract · 6.8B** |
+| **minakanushi_6_8b** | `configs/architecture/minakanushi_6_8b.yaml` / `models/MINA-6.8B/` | 4096 | 512 | 32 | **Yunmu contract · 6.8B · [HF Status Core](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B)** |
 | research_v01 | `configs/architecture/research_v01.yaml` | 2048 | 512 | 24 | 1.3B rung, not the product target |
 | gpu_train_v01 | `configs/architecture/gpu_train_v01.yaml` | 256 | 64 | 6 | GPU bring-up instrument (6.2M) |
 | cpu_dev | `configs/architecture/cpu_dev.yaml` | 64 | 16 | 2 | tests / CPU loop |
