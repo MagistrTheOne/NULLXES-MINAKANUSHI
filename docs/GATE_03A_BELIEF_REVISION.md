@@ -3,6 +3,10 @@
 **Status:** executable slice under `docs/GATE_03_PRE_WORLD_MODEL.md`
 **Does not train a world model.** Does not add identity networks.
 
+**Next exam (training loop):** `docs/GATE_03_REVISION_VALIDATION.md`
+on tag `MINAKANUSHI-revision-gate`. Constructor primitives here; DWC
+revision under `L_revision` there.
+
 ```text
 CERBER:        I saw
 MINAKANUSHI:   I believe what is happening
