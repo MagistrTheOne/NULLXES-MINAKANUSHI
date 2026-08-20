@@ -13,6 +13,7 @@ from torch import Tensor
 from torch.nn.utils import clip_grad_norm_
 
 from minakanushi.architecture.config import MinakanushiConfig, load_config
+from minakanushi.architecture.freeze import assert_may_construct, is_6_8b_profile
 from minakanushi.architecture.mina_unit import MinaUnitBatch, pack_units
 from minakanushi.architecture.model import MinakanushiSystem
 from minakanushi.constraints.kernel import MinakanushiConstraintKernel
@@ -118,6 +119,20 @@ class Trainer:
     def __init__(self, config: MinakanushiConfig, root: Path) -> None:
         if config.training is None:
             raise ValueError("Trainer requires training config")
+        train = config.training
+        gpu_name = ""
+        if str(train.device).startswith("cuda") and torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+        assert_may_construct(config.architecture, device=train.device, gpu_name=gpu_name)
+        if is_6_8b_profile(config.architecture):
+            from minakanushi.training.parallel import plan_from_training
+
+            plan_from_training(config.architecture, train)
+            if train.parallelism == "fsdp2_zero3":
+                import torch.distributed as dist
+
+                if not dist.is_available() or not dist.is_initialized():
+                    raise RuntimeError("6.8B fsdp2_zero3 requires torchrun before construct")
         self.config = config
         self.root = root
         seed_everything(config.training.seed)
@@ -128,6 +143,12 @@ class Trainer:
         self._amp_enabled = self.device.type == "cuda" and self.dtype in (torch.bfloat16, torch.float16)
         self.compute_dtype = torch.float32 if self._amp_enabled else self.dtype
         self.system = MinakanushiSystem(config.architecture).to(self.device)
+        if train.activation_checkpoint or is_6_8b_profile(config.architecture):
+            self.system.world_core.activation_checkpoint = True
+        if train.parallelism == "fsdp2_zero3":
+            from minakanushi.training.parallel import wrap_fsdp2
+
+            self.system = wrap_fsdp2(self.system)
         self.constructor = StateConstructor(config.architecture)
         self.opt = torch.optim.AdamW(
             self.system.parameters(),
@@ -447,10 +468,13 @@ class Trainer:
                     out_dir / f"minakanushi_stage{train.stage}_step{step}.mina",
                     self.system,
                     optimizer=self.opt,
+                    shard_max_bytes=int(train.shard_max_bytes),
                     extras={
                         "stage": train.stage,
                         "step": step,
                         "seed": train.seed,
+                        "dataset_name": train.dataset_name,
+                        "dataset_cursor": step,
                         "loss": log.loss,
                         "traj_error": log.traj_error,
                         "metrics": {"traj_error": log.traj_error, "loss": log.loss},

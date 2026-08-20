@@ -69,6 +69,14 @@ Curriculum:
 - Stage 0 generalization eval (no training) — `configs/training/stage0_generalization.yaml`
 - Stage 1 world representation — `configs/training/stage1_world.yaml`
 - Stage 2 temporal dynamics — `configs/training/stage2_temporal.yaml`
+- 6.8B sanity contract — `configs/training/mina_6_8b_sanity.yaml` (H200/B300 only)
+
+CPU stack check (does **not** construct 6.8B):
+
+```text
+python scripts/sanity_pretrain.py
+python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b --n 2
+```
 
 Commands (operator-authorized machines only):
 
@@ -97,15 +105,16 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/WORLD_STATE.md`
 - `docs/MEMORY.md`
 - `docs/TRAINING.md`
-- `docs/TRAINING_PLAN.md` — Maga GPU order ($30 now, November later)
-- `docs/GPU_BRINGUP_6000BW.md` — Stage A report (fill on pod)
+- `docs/TRAINING_PLAN.md` — 6.8B pre-train order after 7aba976 freeze
+- `docs/GPU_BRINGUP_6000BW.md` — Stage A report
 - `docs/CONSTRAINTS.md`
-- `docs/GATE_03_PRE_WORLD_MODEL.md` — approved lock: belief target, SelfModel
+- `docs/GATE_6_8B_PRETRAIN.md` — current lock: FSDP2, bf16, episode curriculum
+- `docs/GATE_03_PRE_WORLD_MODEL.md` — closed: belief target, SelfModel
   as passport not network, authority gates action not cognition
 - `docs/GATE_03A_BELIEF_REVISION.md` — constructor revision primitives
 - `docs/GATE_03_REVISION_VALIDATION.md` — training-loop exam (DWC vs evidence)
 - `docs/GATE_03B_HIDDEN_DIRECTION.md` — hidden 0.5: prior vs evidence diagnostic
-- `docs/GATE_03B_HIDDEN_DIRECTION_REPORT.md` — fill after n=1000 Blackwell run
+- `docs/GATE_03B_HIDDEN_DIRECTION_REPORT.md` — closed, Variant 1, n=1000
 - `docs/GATE_04_IDENTITY.md` — SelfModel, Authority, Persona (not a prompt)
 - `docs/GATE_05_BELIEF.md` — Belief Engine (mean + std + existence)
 - `docs/GATE_06_EXPERIENCE.md` — memory as experience (not RAG)

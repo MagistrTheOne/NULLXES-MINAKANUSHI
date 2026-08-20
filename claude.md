@@ -1953,17 +1953,17 @@ NULLXES MINAKANUSHI
 
 ---
 
-# 41. GATE LOCK — 03 / PRE-WORLD MODEL
+# 41. GATE LOCK — 6.8B PRE-TRAIN
 
-Gate 02 is closed. Do not start world-model scale training.
+Gates 02–03B are closed. Architecture frozen at `7aba976`.
 
-Next executable gate is Gate 03: synthetic curriculum, held-out generalization,
-and Adversarial Reality Check (belief correction + sensor/memory conflict,
-not blind averaging).
+Next executable gate is **MINAKANUSHI 6.8B PRE-TRAIN**: FSDP2 / ZeRO-3,
+bf16, sharded `*.mina` resume, episode curriculum. Not Yunmu. Not a new
+module. Do not construct `minakanushi_6_8b` on CPU or RTX PRO 6000.
 
-SelfModel, when implemented (Gate 04), is structured passport state
-(identity, capabilities, embodiment, authority, runtime). Never a
-SelfModel Transformer, Identity Head, or “I AM MINAKANUSHI” text objective.
+SelfModel is structured passport state (identity, capabilities, embodiment,
+authority, runtime). Never a SelfModel Transformer, Identity Head, or
+“I AM MINAKANUSHI” text objective.
 
 Authority changes decision permission. It does not erase world understanding
 and does not bypass hard constraints. `policy_enabled=false` is cognition on,
@@ -1971,8 +1971,7 @@ autonomous selection off.
 
 `B_t` is a probabilistic belief state, not a hidden embedding only.
 
-Canonical lock: `docs/GATE_03_PRE_WORLD_MODEL.md`.
-Executable slice: `docs/GATE_03A_BELIEF_REVISION.md` (belief revision, conflict,
-WAIT ≠ OBSERVE, no world-model training).
-Gate 04 identity lock: `docs/GATE_04_IDENTITY.md` (SelfModel + Authority +
-Persona; short name MINA; not a prompt).
+Canonical lock: `docs/GATE_6_8B_PRETRAIN.md`.
+Training contract: `docs/MINA_6_8B_TRAINING.md`.
+Identity lock: `docs/GATE_04_IDENTITY.md` (SelfModel + Authority + Persona;
+short name MINA; not a prompt).

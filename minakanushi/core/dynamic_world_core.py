@@ -34,6 +34,7 @@ class DynamicWorldCore(nn.Module):
         self.xy_residual = nn.Linear(dim, 2)
         self.memory_write = nn.Linear(dim, config.memory_dim)
         self.seed_head = nn.Linear(dim, dim)
+        self.activation_checkpoint = False
 
     def forward(
         self,
@@ -63,7 +64,17 @@ class DynamicWorldCore(nn.Module):
             previous = state.latent_state
             updated = previous
             for block in self.blocks:
-                updated = block(updated, fused_obs, state.occupied, units.mask)
+                if self.training and self.activation_checkpoint:
+                    updated = torch.utils.checkpoint.checkpoint(
+                        block,
+                        updated,
+                        fused_obs,
+                        state.occupied,
+                        units.mask,
+                        use_reentrant=False,
+                    )
+                else:
+                    updated = block(updated, fused_obs, state.occupied, units.mask)
             last_delta = slot_delta(previous, updated, state.occupied)
             state.latent_state = updated
             cycles += 1

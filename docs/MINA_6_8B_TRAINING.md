@@ -3,26 +3,31 @@
 **Profile:** `minakanushi_6_8b` / `models/MINA-6.8B`  
 **Identity:** NULLXES · MINAKANUSHI · MINA  
 **Params (formula inventory):** 6 799 130 646  
-**Status:** contract. Weights do not exist yet.
+**Status:** PRE-TRAIN GATE. Architecture frozen at `7aba976`. Weights do not exist yet.
 
-This is the Yunmu / Warmcore research profile. `gpu_train_v01` (6.2M) is the
-bring-up **instrument**, not a product line. Do not shrink 6.8B to fit a $30
-pod. Prove the stack on 6.2M, train 6.8B on H200/B300.
+Executable lock: `docs/GATE_6_8B_PRETRAIN.md`.
+
+This is the first contractual 6.8B run. It is not Yunmu. It is not a new
+module. `gpu_train_v01` (6.2M) was the bring-up instrument and is closed.
 
 ```text
-MINAKANUSHI 6.8B
+MINAKANUSHI foundation (frozen)
     ↓
-training curriculum (physical episodes)
+episode curriculum (physical, not tokens)
     ↓
-validation gates (belief / memory / causality / OOD)
+FSDP2 / ZeRO-3 + bf16 + sharded *.mina
     ↓
-humanoid simulation (ActionIntent)
+H200 / B300 sanity pretrain
     ↓
-Yunmu review + optional Warmcore joint finetune
+MINA-6.8B checkpoint
+    ↓
+humanoid simulation (ActionIntent) — later
+    ↓
+Yunmu — later
 ```
 
 6.8B parameters do not create intelligence. Diversity of **physical
-cause → effect** does.
+cause → effect** does. Scale this MINA. Do not search for another architecture.
 
 ---
 
@@ -194,18 +199,33 @@ and workspace limits inside SelfModel, not a new network.
 
 ---
 
-## 8. What today on RunPod is
+## 8. What the 6000 BW pod was
 
 ```text
 1× RTX PRO 6000 BW
 gpu_train_v01  6.2M
-prove: CUDA, bf16, AMP, dataloader, .mina save/load, metrics
-fill docs/GPU_BRINGUP_6000BW.md
-STOP
+Gate 03B n=1000  closed
+STOP / terminate — do not construct 6.8B there
 ```
 
-Do not construct `MinakanushiSystem` from `minakanushi_6_8b.yaml` on that pod.
+Do not construct `MinakanushiSystem` from `minakanushi_6_8b.yaml` on CPU or
+that pod. Sanity stack check:
+
+```text
+python scripts/sanity_pretrain.py
+python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b --n 2
+```
+
+H200/B300 train (torchrun, later):
+
+```text
+torchrun --nproc_per_node=2 scripts/train.py \
+  --config configs/training/mina_6_8b_sanity.yaml
+```
+
+That command is forbidden until Maga provisions H200/B300.
 
 ---
 
 Maga: this specification is the 6.8B training contract until revised.
+Architecture freeze: `7aba976`. Gate: `docs/GATE_6_8B_PRETRAIN.md`.

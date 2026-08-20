@@ -15,6 +15,7 @@ from torch.optim import Optimizer
 
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.model import MinakanushiSystem
+from minakanushi.training.shard import merge_tensor_maps, split_tensor_map
 
 
 MANIFEST_NAME = "manifest.yaml"
@@ -69,6 +70,25 @@ def build_manifest(config: ArchitectureConfig, extras: dict | None = None) -> di
     return manifest
 
 
+def _identity_json(extras: dict | None) -> str:
+    return json.dumps(
+        {
+            "architecture": "MINAKANUSHI",
+            "short_name": "MINA",
+            "architecture_id": "nullxes.minakanushi",
+            "organization": "NULLXES",
+            "native_runtime": "nullxes",
+            "identity_state": (extras or {}).get("identity"),
+        }
+    )
+
+
+def _write_zip_bytes(zf: zipfile.ZipFile, name: str, payload: object) -> None:
+    buffer = io.BytesIO()
+    torch.save(payload, buffer)
+    zf.writestr(name, buffer.getvalue())
+
+
 def save_mina(
     path: str | Path,
     system: MinakanushiSystem,
@@ -76,6 +96,7 @@ def save_mina(
     optimizer: Optimizer | None = None,
     extras: dict | None = None,
     tensors: dict | None = None,
+    shard_max_bytes: int = 0,
 ) -> Path:
     path = Path(path)
     if path.suffix != ".mina":
@@ -88,25 +109,22 @@ def save_mina(
         "optimizer": optimizer.state_dict() if optimizer is not None else None,
         "runtime": tensors,
     }
+    sharded = int(shard_max_bytes) > 0
+    manifest["sharded"] = sharded
+    if sharded:
+        system_shards = split_tensor_map(payload["system"], int(shard_max_bytes))
+        manifest["n_system_shards"] = len(system_shards)
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(MANIFEST_NAME, yaml.safe_dump(manifest, sort_keys=False))
         zf.writestr(CONFIG_NAME, yaml.safe_dump(asdict(system.config), sort_keys=False))
-        buffer = io.BytesIO()
-        torch.save(payload, buffer)
-        zf.writestr(WEIGHTS_NAME, buffer.getvalue())
-        zf.writestr(
-            "identity.json",
-            json.dumps(
-                {
-                    "architecture": "MINAKANUSHI",
-                    "short_name": "MINA",
-                    "architecture_id": "nullxes.minakanushi",
-                    "organization": "NULLXES",
-                    "native_runtime": "nullxes",
-                    "identity_state": (extras or {}).get("identity"),
-                }
-            ),
-        )
+        zf.writestr("identity.json", _identity_json(extras))
+        if sharded:
+            for i, shard in enumerate(system_shards):
+                _write_zip_bytes(zf, f"weights/system-{i:05d}.pt", shard)
+            rest = {k: v for k, v in payload.items() if k != "system"}
+            _write_zip_bytes(zf, "weights/sidecar.pt", rest)
+        else:
+            _write_zip_bytes(zf, WEIGHTS_NAME, payload)
     return path
 
 
@@ -137,11 +155,28 @@ def load_mina(
         }.items():
             if int(manifest[key]) != int(expected):
                 raise ValueError(f"checkpoint {key}={manifest[key]} vs system {expected}")
-        payload = torch.load(
-            io.BytesIO(zf.read(WEIGHTS_NAME)),
-            map_location="cpu",
-            weights_only=False,
-        )
+        names = set(zf.namelist())
+        if WEIGHTS_NAME in names:
+            payload = torch.load(
+                io.BytesIO(zf.read(WEIGHTS_NAME)),
+                map_location="cpu",
+                weights_only=False,
+            )
+        else:
+            shard_names = sorted(n for n in names if n.startswith("weights/system-") and n.endswith(".pt"))
+            if not shard_names:
+                raise ValueError("checkpoint has neither weights.pt nor sharded system maps")
+            shards = [
+                torch.load(io.BytesIO(zf.read(name)), map_location="cpu", weights_only=False)
+                for name in shard_names
+            ]
+            sidecar = torch.load(
+                io.BytesIO(zf.read("weights/sidecar.pt")),
+                map_location="cpu",
+                weights_only=False,
+            )
+            payload = dict(sidecar)
+            payload["system"] = merge_tensor_maps(shards)
     incompatible = system.load_state_dict(payload["system"], strict=True)
     if incompatible.missing_keys or incompatible.unexpected_keys:
         raise ValueError(f"strict load failed: {incompatible}")

@@ -143,6 +143,10 @@ class TrainingConfig:
     checkpoint_every: int = 100
     precision: str = "float32"
     device: str = "cpu"
+    parallelism: str = "none"
+    activation_checkpoint: bool = False
+    warmup_steps: int = 0
+    shard_max_bytes: int = 0
     lambdas: LossLambdaConfig = field(default_factory=LossLambdaConfig)
     regularizer: RegularizerConfig = field(default_factory=RegularizerConfig)
     n_overfit_episodes: int = 16
@@ -267,6 +271,10 @@ def load_training(path: str | Path) -> TrainingConfig:
         checkpoint_every=int(raw.get("checkpoint_every", 100)),
         precision=str(raw.get("precision", "float32")),
         device=str(raw.get("device", "cpu")),
+        parallelism=str(raw.get("parallelism", "none")),
+        activation_checkpoint=bool(raw.get("activation_checkpoint", False)),
+        warmup_steps=int(raw.get("warmup_steps", 0)),
+        shard_max_bytes=int(raw.get("shard_max_bytes", 0)),
         lambdas=LossLambdaConfig(**lambdas) if lambdas else LossLambdaConfig(),
         regularizer=RegularizerConfig(**regularizer) if regularizer else RegularizerConfig(),
         n_overfit_episodes=int(raw.get("n_overfit_episodes", 16)),

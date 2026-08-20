@@ -1,50 +1,62 @@
-# RunPod — stack instrument first, 6.8B later
+# RunPod — 6.8B train is H200, not 6000 BW
 
 **Target profile:** `minakanushi_6_8b` (6.8B). Spec: `docs/MINA_6_8B_TRAINING.md`.  
-**Do not** `MinakanushiSystem` from `minakanushi_6_8b.yaml` on the 6000 BW pod.
+**Gate:** `docs/GATE_6_8B_PRETRAIN.md`. Frozen at `7aba976`.
 
-## Next cash — Gate 03B hidden direction
+Do not `MinakanushiSystem` from `minakanushi_6_8b.yaml` on CPU or RTX PRO 6000.
 
-Parent exam: Gate 03 on `main` (`3d8012e`). Profile: `gpu_train_v01` only.
-Wall clock 30–60 min. **Eval diagnostic, not a full train.** `λ_revision = 1.0`.
-Do not retune λ. Do not scale. Question: does hidden direction stay 0.5
-across N episodes, or was that `cpu_dev` / one seed?
+**Do not terminate this H200.** Do not stop. Maga prepares the machine.
 
-```text
-git clone <repo>
-python -m pip install -e ".[test]"
-python -m pytest tests -q
-python scripts/gate03b_hidden_direction.py \
-  --training configs/training/stage_a_gpu_train_v01.yaml \
-  --n 1000 \
-  --out experiments/gate03b
-```
-
-Fill `docs/GATE_03B_HIDDEN_DIRECTION_REPORT.md` from the JSON.
-Do **not** terminate the Community Cloud pod mid-run (the machine is gone).
-Detach with `nohup`. Terminate only after the JSON is copied.
-
-Closed: 6.8B, H200, humanoid, Yunmu, architecture edit, λ change.
-
-## Stage A (done)
+## Current iron — 1× H200 SXM
 
 ```text
-Stage A   RTX PRO 6000 BW    gpu_train_v01 6.2M
-          CUDA / bf16 / AMP / *.mina
-          docs/GPU_BRINGUP_6000BW.md
+image: runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
+GPU:   1× H200 SXM  141 GB
+RAM:   188 GB
+vCPU:  12
+disk:  2250 GB
 ```
 
-Community Cloud ~$1.69–2.40/h. Cap the pod.
+GPU ~$4.59/h + disk. Leave it UP while work is in flight.
 
-## November (100–200k RUB)
+1× H200 is the sanity machine. Full AdamW 6.8B is tight on 141 GB
+(weights+opt+grad ≈ 110–136 GB before activations). If OOM: do not add
+slots, do not add layers. Activation checkpoint is already on. Next iron
+is 2× H200 or 1× B300.
 
-2× H200 or 1× B300. FSDP, activation checkpointing, episode streaming.  
-Yunmu package: `models/MINA-6.8B` + docs. Weights after curriculum gates.
-Only after Gate 03 revision is a live signal.
+## Operator — Maga pastes this
 
-## Not now
+On the laptop, after the pre-train commit is on `origin/main`:
 
-- training 6.8B on 96 GB
-- overnight without auto-stop
-- `loss ↓` as success
-- LLM downloads
+```text
+git push origin main
+```
+
+On the H200 (do not pip-install numpy):
+
+```text
+cd /workspace
+git clone https://github.com/MagistrTheOne/NULLXES-MINAKANUSHI.git NULLXES-MINAKANUSHI
+cd NULLXES-MINAKANUSHI
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+python -m pip install --break-system-packages --no-deps -e .
+python -u scripts/sanity_pretrain.py --out experiments/gate_6_8b_pretrain
+python -u scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b --n 2 --length 12
+```
+
+Or: `bash scripts/pod_6_8b_pretrain.sh`
+
+Sanity train is a **later** paste, not the first command:
+
+```text
+torchrun --nproc_per_node=1 scripts/train.py \
+  --config configs/training/mina_6_8b_sanity.yaml \
+  --out experiments/mina_6_8b_sanity
+```
+
+That constructs 6.8B. Only after stack JSON exists. Detach with `nohup` /
+`torchrun` in background. **Do not terminate.**
+
+Closed: Yunmu, Gate 10, FP16, 48 layers, extra slots, λ as a substitute for data.

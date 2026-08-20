@@ -97,7 +97,7 @@ byte-for-byte. Identity 1.0 is still valid on that shared trajectory.
 ```text
 verdict: capacity_or_seed: hidden direction moved; Gate 03 closed
 gate03_closed: yes (Maga 2026-08-20)
-next: Gate 04/08 consolidation — belief revision + world model + experience + runtime
-      in one loop. Then 6.8B. Pod stays UP. Do not terminate. Do not bump λ.
+next: 6.8B PRE-TRAIN GATE (frozen 7aba976). H200/B300. Not Yunmu.
+      Do not bump λ. Do not construct 6.8B on CPU or 6000 BW.
 operator: Maga accepted Variant 1. JSON stays local (experiments/, not in git).
 ```

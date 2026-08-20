@@ -5,9 +5,7 @@ NULLXES MINAKANUSHI 6.8B
 short name: MINA
 ```
 
-Contractual research profile for Yunmu / Warmcore review. Same architecture
-family as `cpu_dev` / `gpu_train_v01`. Not a chatbot. Not a 6.2M “small MINA
-line.”
+**Status:** PRE-TRAIN GATE. Frozen at `7aba976`. Weights not in this folder.
 
 ```text
 MINA
