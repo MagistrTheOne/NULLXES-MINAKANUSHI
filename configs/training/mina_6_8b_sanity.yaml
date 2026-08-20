@@ -20,7 +20,7 @@ warmup_steps: 0
 precision: bf16
 device: cuda
 parallelism: fsdp2_zero3
-activation_checkpoint: true
+activation_checkpoint: false
 shard_max_bytes: 1073741824
 
 lambdas:

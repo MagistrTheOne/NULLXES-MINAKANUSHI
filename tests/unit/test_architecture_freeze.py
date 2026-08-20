@@ -69,7 +69,7 @@ def test_sanity_yaml_is_fsdp2_bf16() -> None:
     plan = plan_from_training(arch, train)
     assert plan.parallelism == "fsdp2_zero3"
     assert plan.precision == "bf16"
-    assert plan.activation_checkpoint is True
+    assert plan.activation_checkpoint is False
     assert plan.cognition_budget == 4
 
 

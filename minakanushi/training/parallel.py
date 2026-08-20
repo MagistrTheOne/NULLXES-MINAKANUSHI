@@ -46,7 +46,7 @@ def plan_from_training(arch: ArchitectureConfig, train: TrainingConfig) -> Train
             sharding="fully_shard",
             precision="bf16",
             reduce_dtype="fp32",
-            activation_checkpoint=True,
+            activation_checkpoint=bool(train.activation_checkpoint),
             cognition_budget=int(arch.cognition.budget),
             shard_max_bytes=int(train.shard_max_bytes) if train.shard_max_bytes > 0 else 1_073_741_824,
         )
@@ -313,19 +313,16 @@ def wrap_fsdp2(module: nn.Module, activation_checkpoint: bool | None = None) -> 
 
     world_core = getattr(module, "world_core", None)
     use_ac = bool(world_core.activation_checkpoint) if activation_checkpoint is None else bool(activation_checkpoint)
+    if use_ac:
+        raise RuntimeError(
+            "FSDP2 activation_checkpoint is disabled for 6.8B sanity: "
+            "PyTorch checkpoint + fully_shard currently records FSDP all-gather "
+            "tensors and fails recompute metadata checks. Set activation_checkpoint: false."
+        )
     if isinstance(world_core, DynamicWorldCore):
         new_blocks = []
         for block in world_core.cognitive_blocks():
             block.activation_checkpoint = False
-            if use_ac:
-                try:
-                    from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-                        CheckpointImpl,
-                        checkpoint_wrapper,
-                    )
-                except ImportError as exc:
-                    raise RuntimeError("FSDP2 activation checkpoint requires checkpoint_wrapper") from exc
-                block = checkpoint_wrapper(block, checkpoint_impl=CheckpointImpl.NO_REENTRANT)
             fully_shard(block)
             new_blocks.append(block)
         world_core.blocks = nn.ModuleList(new_blocks)

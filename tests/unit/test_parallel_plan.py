@@ -151,50 +151,21 @@ def test_wrap_fsdp2_shards_cognitive_blocks_not_root(monkeypatch) -> None:
     assert hooks
 
 
-def test_wrap_fsdp2_checkpoint_wrapper_before_fully_shard(monkeypatch) -> None:
+def test_wrap_fsdp2_rejects_activation_checkpoint(monkeypatch) -> None:
     from minakanushi.architecture.model import MinakanushiSystem
-    from minakanushi.core.cognitive_block import CognitiveBlock
-
-    wrapped_inner: list[nn.Module] = []
-    sharded: list[nn.Module] = []
-
-    class FakeWrap(nn.Module):
-        def __init__(self, inner: nn.Module) -> None:
-            super().__init__()
-            self._checkpoint_wrapped_module = inner
-
-        def forward(self, *args, **kwargs):
-            return self._checkpoint_wrapped_module(*args, **kwargs)
-
-    def fake_checkpoint_wrapper(mod, checkpoint_impl=None):
-        wrap = FakeWrap(mod)
-        wrapped_inner.append(mod)
-        return wrap
-
-    def fake_fully_shard(mod, mp_policy=None):
-        sharded.append(mod)
-        return mod
 
     monkeypatch.setattr("torch.distributed.is_available", lambda: True)
     monkeypatch.setattr("torch.distributed.is_initialized", lambda: True)
     monkeypatch.setattr("torch.distributed.get_world_size", lambda: 1)
-    import torch.distributed.algorithms._checkpoint.checkpoint_wrapper as acw
     import torch.distributed.fsdp as fsdp
 
-    monkeypatch.setattr(acw, "checkpoint_wrapper", fake_checkpoint_wrapper, raising=False)
-    monkeypatch.setattr(acw, "CheckpointImpl", SimpleNamespace(NO_REENTRANT="NO_REENTRANT"), raising=False)
-    monkeypatch.setattr(fsdp, "fully_shard", fake_fully_shard, raising=False)
+    monkeypatch.setattr(fsdp, "fully_shard", lambda mod, mp_policy=None: mod, raising=False)
 
     arch = load_architecture(ROOT / "configs" / "architecture" / "cpu_dev.yaml")
     system = MinakanushiSystem(arch)
     system.world_core.activation_checkpoint = True
-    wrap_fsdp2(system, activation_checkpoint=True)
-    assert len(wrapped_inner) == arch.core_depth
-    assert all(isinstance(mod, CognitiveBlock) for mod in wrapped_inner)
-    assert all(mod.activation_checkpoint is False for mod in wrapped_inner)
-    assert sharded
-    assert all(isinstance(mod, FakeWrap) for mod in sharded)
-    assert all(inner.activation_checkpoint is False for inner in system.world_core.cognitive_blocks())
+    with pytest.raises(RuntimeError, match="activation_checkpoint is disabled"):
+        wrap_fsdp2(system, activation_checkpoint=True)
 
 
 def test_is_fsdp_dtensor_rejects_plain_tensor() -> None:

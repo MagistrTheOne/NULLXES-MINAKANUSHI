@@ -67,10 +67,8 @@ def test_dwc_checkpoint_passes_amp_recompute_context() -> None:
     dwc = (ROOT / "minakanushi" / "core" / "dynamic_world_core.py").read_text(encoding="utf-8")
     parallel = (ROOT / "minakanushi" / "training" / "parallel.py").read_text(encoding="utf-8")
     trainer = (ROOT / "minakanushi" / "training" / "trainer.py").read_text(encoding="utf-8")
-    assert "checkpoint(" in block
-    assert "_compute_with_amp" in block
     assert "def cognitive_blocks" in dwc
-    assert "checkpoint_wrapper" in parallel
+    assert "FSDP2 activation_checkpoint is disabled" in parallel
     assert "activation_checkpoint=bool(train.activation_checkpoint)" in trainer
     assert "or is_6_8b_profile(config.architecture)" not in trainer
 
