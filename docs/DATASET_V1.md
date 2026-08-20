@@ -28,8 +28,21 @@ Each episode JSON:
 }
 ```
 
-Replay: same `(seed, scenario, episode_index, length)` yields the same
-`world_states`.
+Replay (Gate 08.5A): same `(seed, scenario, episode_index, length)` yields
+bitwise-identical canonical JSON for world, observations, actions, events,
+futures, and outcomes.
+
+Inspector (08.5B):
+
+```text
+python scripts/inspect_episode.py dataset/ood/<episode>.json
+```
+
+Balance (08.5C):
+
+```text
+python scripts/dataset_balance.py dataset
+```
 
 Generate:
 
@@ -37,5 +50,5 @@ Generate:
 python scripts/generate_dataset.py --root dataset --n 4 --length 8
 ```
 
-`belief_states` / `future_branches` stay empty until a closed-loop recorder
-fills them. That is allowed in v1.
+`belief_states` are teacher visibility confidences (inspectable). MINA
+posterior tensors are filled by a closed-loop recorder, not by this writer.

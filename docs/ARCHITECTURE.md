@@ -96,7 +96,8 @@ Organism order (Maga). Do not implement a later gate in an earlier PR.
 | 05 | Belief Engine | done |
 | 06 | Memory as Experience | done |
 | 07 | Focus / Attention Selection | done |
-| 08 | Active World Model (`Belief_t` + Action → `Belief_{t+1}`) | this gate |
+| 08 | Active World Model (`Belief_t` + Action → `Belief_{t+1}`) | done |
+| 08.5 | Dataset Reality Check (replay / inspector / balance / causal) | this gate |
 | 09 | Autonomous Runtime | not this PR |
 | 10 | Embodiment adapters | not this PR |
 | 11 | Language interface | not this PR |

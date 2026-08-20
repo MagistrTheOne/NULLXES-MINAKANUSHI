@@ -47,5 +47,6 @@ not invent mover motion), prediction calibration.
 
 ## Dataset / RunPod
 
-See `docs/DATASET_V1.md` and `docs/RUNPOD.md`. Generate on CPU first.
-Do not start `gpu_train_v01` until the contract tests pass.
+See `docs/GATE_08_5_DATASET.md`, `docs/DATASET_V1.md`, and `docs/RUNPOD.md`.
+Generate on CPU first. Gate 09 (autonomous runtime) is not this gate.
+Do not start `gpu_train_v01` until dataset reality checks pass.
