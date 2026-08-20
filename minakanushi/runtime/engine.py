@@ -21,10 +21,11 @@ from minakanushi.constraints.kernel import MinakanushiConstraintKernel
 from minakanushi.future.engine import group_by_strategy
 from minakanushi.identity.authority import AuthorityModel, AuthorityMode, candidate_from_intent
 from minakanushi.identity.constants import SHORT_NAME
-from minakanushi.identity.experience import ExperienceLog
-from minakanushi.identity.focus import focus_from_world
+from minakanushi.identity.experience import ExperienceLog, ExperienceRecord, LESSON_POSITION, LESSON_VELOCITY
+from minakanushi.focus.engine import FocusEngine, FocusState, focus_from_world
 from minakanushi.identity.persona import PersonaModel
 from minakanushi.identity.self_model import SelfModel
+from minakanushi.memory.action_outcome import record_outcome
 from minakanushi.memory.experience import ExperienceEngine
 from minakanushi.perception.bridge import Observation
 from minakanushi.policy.action_policy import ActionPolicy
@@ -62,6 +63,7 @@ class MinakanushiEngine:
         self.persona = PersonaModel()
         self.authority = AuthorityModel()
         self.experience = ExperienceEngine()
+        self.focus_engine = FocusEngine()
 
     @property
     def future(self):
@@ -143,7 +145,36 @@ class MinakanushiEngine:
         _, core = self.system.observe_to_core(packed, constructed, hints)
         world = core.world_state
         self.system.memory.write(world, core.memory_write_candidates)
-        sit = self.situation.build(world, self.system.uncertainty(world, packed), ())
+        if state.last_predicted is not None and state.last_intent is not None:
+            outcome = record_outcome(
+                intent=state.last_intent,
+                belief_before=state.world,
+                predicted=state.last_predicted,
+                actual=world,
+                event_time=float(observations.timestamp),
+            )
+            self_model.action_outcomes.append(outcome)
+            if outcome.correction:
+                lesson = LESSON_VELOCITY if "velocity" in outcome.lesson else LESSON_POSITION
+                self_model.experience.append(
+                    ExperienceRecord(
+                        event_time=float(observations.timestamp),
+                        situation="action_outcome",
+                        action=state.last_intent.objective,
+                        entity_id=1,
+                        error_xy=outcome.prediction_error,
+                        error_vel=outcome.prediction_error,
+                        correction_required=True,
+                        lesson=lesson,
+                    )
+                )
+        prev_action = state.last_intent.objective if state.last_intent is not None else "OBSERVE"
+        for record in self.experience.record_cycle(
+            state.world, world, arch.dt, prev_action, float(observations.timestamp)
+        ):
+            self_model.experience.append(record)
+        focus = self.focus_engine.select(world, self_model.experience, float(observations.timestamp))
+        sit = self.situation.build(world, self.system.uncertainty(world, packed), (), focus=focus)
         candidates = list(self.strategy.generate(sit, self.config.simulation.home))
         if operator_intent is not None:
             extra = candidate_from_intent(operator_intent)
@@ -165,11 +196,7 @@ class MinakanushiEngine:
         self_model.policy_enabled = authority.policy_enabled
         self_model.operator_connected = authority.operator_connected
         self_model.tick(arch.dt, sit.uncertainty, world.corrections)
-        for record in self.experience.record_cycle(
-            state.world, world, arch.dt, intent.objective, float(observations.timestamp)
-        ):
-            self_model.experience.append(record)
-        focus = focus_from_world(world)
+        predicted = self.system.future.predict_belief(world, candidate_from_intent(intent), steps=1)
         telemetry = CycleTelemetry(
             cycle_id=state.cycle_id + 1,
             physical_time=observations.timestamp,
@@ -193,6 +220,9 @@ class MinakanushiEngine:
                 "short_name": SHORT_NAME,
                 "persona_bound": False,
                 "experience_count": len(self_model.experience.records),
+                "focus_type": focus.focus_type,
+                "focus_target": focus.target_id,
+                "action_outcomes": len(self_model.action_outcomes.records),
             },
         )
         self.telemetry.emit(telemetry)
@@ -206,6 +236,7 @@ class MinakanushiEngine:
             authority=authority,
             persona=persona,
             focus=focus,
+            last_predicted=predicted,
         )
         return EngineStep(state=nxt, action_intent=intent, telemetry=telemetry)
 
@@ -231,6 +262,8 @@ class MinakanushiEngine:
         if bundle.get("persona"):
             state.persona = PersonaModel.from_dict(bundle["persona"])
             self.persona = state.persona
+        if bundle.get("focus"):
+            state.focus = FocusState.from_dict(bundle["focus"])
         return state
 
     def _goal(self, sit) -> tuple[float, float]:

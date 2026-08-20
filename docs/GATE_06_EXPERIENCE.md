@@ -1,8 +1,7 @@
 # Gate 06 — Memory as Experience
 
 **Status:** implemented on `cpu_dev`
-**Does not:** Focus Engine (07), action-conditional world model (08),
-`research_v01`, vision, language
+**Does not:** Focus Engine is Gate 07. Action-conditional world model is Gate 08.
 
 Tensor memory (working ring + episodic slot store) stays. Gate 06 adds the
 layer Maga named **experience**:

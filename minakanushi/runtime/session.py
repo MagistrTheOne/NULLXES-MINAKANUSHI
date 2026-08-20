@@ -24,3 +24,4 @@ class SessionState:
     authority: AuthorityModel | None = None
     persona: PersonaModel | None = None
     focus: FocusState | None = None
+    last_predicted: WorldState | None = None

@@ -16,6 +16,7 @@ from torch import Tensor, nn
 
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.core.recurrent_state import clone_world
+from minakanushi.future.belief import roll_belief
 from minakanushi.future.trajectory import FutureTrajectory
 from minakanushi.state.entity import AGENT_SLOT
 from minakanushi.state.world import WorldState
@@ -120,6 +121,30 @@ class FutureEngine(nn.Module):
         if after != original:
             raise RuntimeError("FutureEngine mutated WorldState tensors; possibility leaked into reality")
         return trajectories
+
+    def predict_belief(
+        self,
+        world: WorldState,
+        strategy: StrategyCandidate,
+        steps: int = 1,
+    ) -> WorldState:
+        """Belief(t)+Action → Belief(t+dt). Does not mutate world."""
+        original = (
+            world.latent_state.data_ptr(),
+            world.entity_xy.data_ptr(),
+            world.entity_vel.data_ptr(),
+            world.existence.data_ptr(),
+        )
+        predicted = roll_belief(world, strategy, steps=steps, dt=self.config.dt)
+        after = (
+            world.latent_state.data_ptr(),
+            world.entity_xy.data_ptr(),
+            world.entity_vel.data_ptr(),
+            world.existence.data_ptr(),
+        )
+        if after != original:
+            raise RuntimeError("predict_belief mutated current belief")
+        return predicted
 
     def _action_vector(self, strategy: StrategyCandidate, agent_xy: Tensor) -> Tensor:
         zeros = torch.zeros(agent_xy.shape[0], 4, device=agent_xy.device, dtype=agent_xy.dtype)

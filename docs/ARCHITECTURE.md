@@ -94,9 +94,9 @@ Organism order (Maga). Do not implement a later gate in an earlier PR.
 | 03A | reality correction | done |
 | 04 | existence (Self / Authority) | done |
 | 05 | Belief Engine | done |
-| 06 | Memory as Experience | this gate |
-| 07 | Curiosity / Focus Engine | not this PR |
-| 08 | Active World Model (`Belief_t` + Action → `Belief_{t+1}`) | not this PR |
+| 06 | Memory as Experience | done |
+| 07 | Focus / Attention Selection | done |
+| 08 | Active World Model (`Belief_t` + Action → `Belief_{t+1}`) | this gate |
 | 09 | Autonomous Runtime | not this PR |
 | 10 | Embodiment adapters | not this PR |
 | 11 | Language interface | not this PR |

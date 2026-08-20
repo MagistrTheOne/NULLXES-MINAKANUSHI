@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from minakanushi.architecture.mina_unit import KIND_IDS
+from minakanushi.focus.engine import FocusState
 from minakanushi.state.entity import AGENT_SLOT
 from minakanushi.state.world import WorldState
 from minakanushi.uncertainty.engine import UncertaintyState
@@ -22,10 +23,17 @@ class SituationState:
     uncertainty: float
     causal_context: tuple[str, ...]
     temporal_context: str
+    attention: FocusState | None = None
 
 
 class SituationCore:
-    def build(self, world: WorldState, uncertainty: UncertaintyState, events: tuple[str, ...]) -> SituationState:
+    def build(
+        self,
+        world: WorldState,
+        uncertainty: UncertaintyState,
+        events: tuple[str, ...],
+        focus: FocusState | None = None,
+    ) -> SituationState:
         agent_xy = world.entity_xy[0, AGENT_SLOT]
         movers = []
         targets = []
@@ -43,10 +51,14 @@ class SituationCore:
             if dist < 0.8 and slot != AGENT_SLOT:
                 hazards.append(f"proximity:{eid}")
         mean_u = float(uncertainty.state_uncertainty[0, world.occupied[0]].mean().item()) if bool(world.occupied.any()) else 1.0
+        relevant = tuple(movers + targets)
+        if focus is not None and focus.target_id != 0:
+            head = (focus.target_id,)
+            relevant = head + tuple(e for e in relevant if e != focus.target_id)
         goals = tuple(f"reach_target:{tid}" for tid in targets) or ("observe",)
         return SituationState(
             world_state=world,
-            relevant_entities=tuple(movers + targets),
+            relevant_entities=relevant,
             active_events=events,
             opportunities=tuple(f"target:{tid}" for tid in targets),
             hazards=tuple(hazards),
@@ -55,4 +67,5 @@ class SituationCore:
             uncertainty=mean_u,
             causal_context=events,
             temporal_context=f"t={float(world.timestamp[0].item()):.3f}",
+            attention=focus,
         )

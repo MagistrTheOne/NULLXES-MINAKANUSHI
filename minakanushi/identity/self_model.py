@@ -16,6 +16,7 @@ from minakanushi.identity.constants import (
     SYSTEM_CLASS,
 )
 from minakanushi.identity.experience import ExperienceLog
+from minakanushi.memory.action_outcome import ActionOutcomeLog
 from minakanushi.state.correction import CorrectionEvent
 
 
@@ -81,6 +82,7 @@ class SelfModel:
     constraints: ConstraintBlock = field(default_factory=ConstraintBlock)
     runtime: RuntimeBlock = field(default_factory=RuntimeBlock)
     experience: ExperienceLog = field(default_factory=ExperienceLog)
+    action_outcomes: ActionOutcomeLog = field(default_factory=ActionOutcomeLog)
 
     def short_name(self) -> str:
         return self.identity.short_name
@@ -108,6 +110,7 @@ class SelfModel:
             },
             "runtime": asdict(self.runtime),
             "experience": self.experience.to_dict(),
+            "action_outcomes": self.action_outcomes.to_dict(),
         }
 
     @classmethod
@@ -144,6 +147,7 @@ class SelfModel:
                 **{k: v for k, v in dict(raw.get("runtime", {})).items() if k in RuntimeBlock.__dataclass_fields__}
             ),
             experience=ExperienceLog.from_dict(raw.get("experience", {})),
+            action_outcomes=ActionOutcomeLog.from_dict(raw.get("action_outcomes", {})),
         )
         return model
 

@@ -156,8 +156,30 @@ def policy_firewall_metrics(kernel, policy, candidates, trajectories, simulation
     return violations, success
 
 
+def action_influence_score(future_a: Tensor, future_b: Tensor, mask: Tensor) -> Tensor:
+    """Does the action change the forecast? future_* [N, 2], mask [N]."""
+    w = mask.to(future_a.dtype).unsqueeze(-1)
+    return ((future_a - future_b).pow(2).mul(w).sum() / w.sum().clamp_min(1.0)).sqrt()
+
+
+def counterfactual_separation_score(future_a: Tensor, future_b: Tensor) -> Tensor:
+    return torch.linalg.vector_norm(future_a - future_b, dim=-1).mean()
+
+
+def causal_consistency_score(agent_delta: Tensor, other_delta: Tensor) -> Tensor:
+    """Action should move the agent more than an unrelated object. Higher is better."""
+    a = torch.linalg.vector_norm(agent_delta, dim=-1).mean()
+    o = torch.linalg.vector_norm(other_delta, dim=-1).mean()
+    return a - o
+
+
+def prediction_calibration_score(confidence: Tensor, error: Tensor) -> Tensor:
+    """confidence in [0,1], error >= 0. Well-calibrated: high conf ↔ low error."""
+    hit = (error < 0.5).to(confidence.dtype)
+    return (confidence - hit).abs().mean()
+
+
 def assemble_bundle(
-    *,
     pred_xy: Tensor,
     true_xy: Tensor,
     pred_vel: Tensor,

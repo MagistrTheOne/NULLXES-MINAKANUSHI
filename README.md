@@ -91,4 +91,8 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/GATE_04_IDENTITY.md` — SelfModel, Authority, Persona (not a prompt)
 - `docs/GATE_05_BELIEF.md` — Belief Engine (mean + std + existence)
 - `docs/GATE_06_EXPERIENCE.md` — memory as experience (not RAG)
+- `docs/GATE_07_FOCUS.md` — Focus Engine / internal attention (not desire)
+- `docs/GATE_08_WORLD_MODEL.md` — Belief(t)+Action → Belief(t+1)
+- `docs/DATASET_V1.md` — SyntheticWorld dataset contract
+- `docs/RUNPOD.md` — GPU pipeline order (not started)
 - `docs/PRETRAINING_GATE_01.md`

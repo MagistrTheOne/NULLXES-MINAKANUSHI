@@ -66,4 +66,4 @@ vs “was actually present.” `L_state` stays as auxiliary grounding.
 11 Language interface
 ```
 
-Leave Gate 04 `FocusState` stubs for Gate 07. Experience is Gate 06.
+Leave Gate 07 for Focus / Attention Selection. Experience is Gate 06.
