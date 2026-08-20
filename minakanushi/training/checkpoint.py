@@ -26,6 +26,17 @@ CHECKPOINT_FORMAT_VERSION = 2
 _STEP_IN_NAME = re.compile(r"step(\d+)", re.IGNORECASE)
 
 
+def yaml_safe(value):
+    """Manifest extras must be SafeDumper-portable. Tuples are not a YAML type."""
+    if isinstance(value, tuple):
+        return [yaml_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): yaml_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [yaml_safe(item) for item in value]
+    return value
+
+
 def _require(manifest: dict, key: str, expected) -> None:
     if key not in manifest:
         raise ValueError(f"checkpoint missing '{key}'")
@@ -67,7 +78,7 @@ def build_manifest(config: ArchitectureConfig, extras: dict | None = None) -> di
         },
     }
     if extras:
-        manifest["train"] = extras
+        manifest["train"] = yaml_safe(extras)
     return manifest
 
 
@@ -79,7 +90,7 @@ def _identity_json(extras: dict | None) -> str:
             "architecture_id": "nullxes.minakanushi",
             "organization": "NULLXES",
             "native_runtime": "nullxes",
-            "identity_state": (extras or {}).get("identity"),
+            "identity_state": yaml_safe((extras or {}).get("identity")),
         }
     )
 

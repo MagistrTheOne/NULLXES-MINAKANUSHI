@@ -50,3 +50,28 @@ def test_trainer_unroll_consumes_json(tmp_path: Path) -> None:
     json_episode = trainer.dataset.episode(0)
     assert pkt.scenario == json_episode.scenario
     assert pkt.episode_index == json_episode.episode_index
+
+
+def test_trainer_unroll_honors_scenario_on_json_dataset(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from minakanushi.architecture.config import load_config
+    from minakanushi.training.trainer import Trainer
+
+    config = load_simulation(ROOT / "configs" / "simulation" / "milestone1.yaml")
+    write_curriculum(tmp_path, config, seed=7, n_episodes=2, length=8)
+    ds = JsonEpisodeDataset(tmp_path, seed=7)
+    named = ds.episode_for_scenario("agent_move", 0)
+    assert named.scenario == "agent_move"
+    cfg = load_config(
+        ROOT / "configs" / "architecture" / "cpu_dev.yaml",
+        training_path=ROOT / "configs" / "training" / "stage0_overfit.yaml",
+        runtime_path=ROOT / "configs" / "runtime" / "cpu.yaml",
+        simulation_path=ROOT / "configs" / "simulation" / "milestone1.yaml",
+    )
+    cfg = replace(cfg, training=replace(cfg.training, dataset_root=str(tmp_path), sequence_length=8))
+    trainer = Trainer(cfg, ROOT)
+    pkt = trainer.unroll(1, scenario="agent_move", episode_index=0)
+    assert pkt.scenario == "agent_move"
+    assert pkt.candidates[0].objective == "MOVE_TO"
+    assert pkt.candidates[1].objective == "WAIT"

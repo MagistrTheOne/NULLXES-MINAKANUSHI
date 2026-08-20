@@ -20,10 +20,12 @@ from minakanushi.future.engine import group_by_strategy
 from minakanushi.policy.action_policy import ActionPolicy
 from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.candidate import StrategyCandidate
+from minakanushi.strategy.hold import HOLD_MODE
 from minakanushi.training.checkpoint import save_mina
 from minakanushi.training.episode_dataset import JsonEpisodeDataset
 from minakanushi.training.metrics import (
     assemble_bundle,
+    branch_diversity,
     counterfactual_separation_score,
     masked_mse,
     memory_effect_delta,
@@ -37,6 +39,28 @@ from minakanushi.utils.tensors import assert_finite, resolve_dtype
 from minakanushi.training.revision import evidence_for_slots, should_revise_mask
 from minakanushi.identity.initialize import canonical_identity_payload
 from simulations.synthetic_world.dataset import TRAIN_CURRICULUM, generate_episode, training_frame
+
+
+def _move_target(simulation, agent_xy: tuple[float, float], labeled_target) -> tuple[float, float]:
+    if getattr(simulation, "targets", ()):
+        xy = simulation.targets[0]["xy"]
+        tgt = (float(xy[0]), float(xy[1]))
+        if tgt != agent_xy:
+            return tgt
+    if labeled_target is not None:
+        tgt = (float(labeled_target[0]), float(labeled_target[1]))
+        if tgt != agent_xy:
+            return tgt
+    return (float(agent_xy[0] + 1.0), float(agent_xy[1]))
+
+
+def counterfactual_candidate(truth, agent_xy: tuple[float, float], simulation) -> StrategyCandidate:
+    """Second strategy must differ from the labeled action. WAIT is not MOVE_TO."""
+    action = str(truth.action)
+    if action in HOLD_MODE:
+        target = _move_target(simulation, agent_xy, truth.action_target)
+        return StrategyCandidate("move_to", "MOVE_TO", target, 0.0, 0.0)
+    return StrategyCandidate("wait", "WAIT", agent_xy, 0.0, 0.0)
 
 
 @dataclass
@@ -193,6 +217,8 @@ class Trainer:
         train = self.config.training
         arch = self.config.architecture
         if self.dataset is not None:
+            if scenario is not None:
+                return self.dataset.episode_for_scenario(scenario, int(episode_index or 0))
             idx = int(episode_index) if episode_index is not None else (step - 1) % len(self.dataset)
             return self.dataset.episode(idx)
         ep_idx = int(episode_index) if episode_index is not None else (step - 1) % max(train.n_overfit_episodes, 1)
@@ -288,8 +314,13 @@ class Trainer:
         if not bool(mem_mask.any()):
             mem_mask = aligned_occ_n
 
+        agent_xy = tuple(float(x) for x in episode.observations[idx].agent_xy)
         cand = StrategyCandidate(truth.action.lower(), truth.action, truth.action_target, 0.0, 0.0)
-        alt = StrategyCandidate("wait", "WAIT", tuple(float(x) for x in episode.observations[idx].agent_xy), 0.0, 0.0)
+        alt = counterfactual_candidate(truth, agent_xy, self.config.simulation)
+        if cand.strategy_id == alt.strategy_id:
+            raise RuntimeError(
+                f"counterfactual collapsed to labeled strategy {cand.strategy_id!r} action={truth.action!r}"
+            )
         trajs = self.system.future.predict(pred, [cand, alt], max_horizon=arch.prediction_horizons.short)
         primary = [t for t in trajs if t.strategy_id == cand.strategy_id]
         other = [t for t in trajs if t.strategy_id == alt.strategy_id]
@@ -409,9 +440,12 @@ class Trainer:
         err_with = masked_mse(pkt.pred_n.entity_xy, pkt.aligned_next, pkt.aligned_occ)
         err_without = masked_mse(core_off.world_state.entity_xy, pkt.aligned_next, pkt.aligned_occ)
         memory_future = float((err_without - err_with).detach())
-        future_div = float(counterfactual_separation_score(pkt.pred_future[0, -1], pkt.alt_future[0, -1]).detach())
-        primary = [t for t in pkt.trajs if t.strategy_id == pkt.trajs[0].strategy_id]
+        primary = [t for t in pkt.trajs if t.strategy_id == pkt.candidates[0].strategy_id]
         branch_xy = torch.stack([t.states_xy for t in primary], dim=0)
+        future_div = float(branch_diversity(branch_xy).detach())
+        counterfactual = float(
+            counterfactual_separation_score(pkt.pred_future[0, -1], pkt.alt_future[0, -1]).detach()
+        )
         true_term = pkt.true_future[0, -1]
         best = torch.linalg.vector_norm(branch_xy[:, -1] - true_term, dim=-1).min(dim=0).values
         const = torch.linalg.vector_norm(pkt.aligned_xy[0] - true_term, dim=-1)
@@ -454,7 +488,7 @@ class Trainer:
             entity_id=pred.entity_id,
             memory_future_delta=memory_future,
             future_diversity=future_div,
-            counterfactual_quality=future_div,
+            counterfactual_quality=counterfactual,
         )
         return asdict(bundle)
 

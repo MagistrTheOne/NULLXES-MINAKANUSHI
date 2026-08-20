@@ -63,3 +63,41 @@ def test_identity_init_rejects_corrupt_passport(tmp_path: Path) -> None:
             zout.writestr(info, data)
     with pytest.raises(IdentityInitError):
         validate_bound_checkpoint(corrupted)
+
+
+def _assert_no_tuples(obj, path: str = "root") -> None:
+    assert not isinstance(obj, tuple), path
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            _assert_no_tuples(value, f"{path}.{key}")
+    elif isinstance(obj, list):
+        for i, value in enumerate(obj):
+            _assert_no_tuples(value, f"{path}[{i}]")
+
+
+def test_identity_extras_are_yaml_safe_lists(tmp_path: Path) -> None:
+    import yaml
+
+    from minakanushi.identity.initialize import canonical_identity_payload
+    from minakanushi.training.checkpoint import yaml_safe
+
+    payload = canonical_identity_payload()
+    _assert_no_tuples(payload)
+    cfg = cpu_config()
+    system = MinakanushiSystem(cfg.architecture)
+    path = tmp_path / "identity_extras.mina"
+    extras = {
+        "step": 64,
+        "identity": payload["identity_state"],
+        "actuators": ("intent_only",),
+    }
+    save_mina(path, system, extras=extras)
+    with zipfile.ZipFile(path) as zf:
+        manifest = yaml.safe_load(zf.read("manifest.yaml"))
+    train = manifest["train"]
+    sensors = train["identity"]["self_model"]["embodiment"]["sensors"]
+    assert isinstance(sensors, list)
+    assert isinstance(train["actuators"], list)
+    assert train["actuators"] == ["intent_only"]
+    assert isinstance(yaml_safe(("vector", "telemetry")), list)
+

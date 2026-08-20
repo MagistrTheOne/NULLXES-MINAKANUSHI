@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from minakanushi.architecture.config import load_simulation
@@ -43,6 +44,8 @@ def test_write_curriculum_creates_four_phases(tmp_path: Path) -> None:
         assert len(paths) == 1
         assert paths[0].is_file()
     assert (tmp_path / "index.jsonl").is_file()
+    first = json.loads((tmp_path / "index.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert "scenario" in first
 
 
 def test_v02_phases_include_causal_agency_embodiment() -> None:

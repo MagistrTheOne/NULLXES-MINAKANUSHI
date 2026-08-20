@@ -120,7 +120,14 @@ def write_index(root: Path, written: dict[str, list[Path]]) -> Path:
     for phase in PHASE_ORDER:
         for path in written[phase]:
             rel = path.relative_to(root).as_posix()
-            lines.append(json.dumps({"path": rel, "phase": phase, "episode_id": path.stem}, sort_keys=True))
+            episode_id = path.stem
+            scenario = episode_id.rsplit("-", 2)[0]
+            lines.append(
+                json.dumps(
+                    {"path": rel, "phase": phase, "episode_id": episode_id, "scenario": scenario},
+                    sort_keys=True,
+                )
+            )
     index = root / "index.jsonl"
     index.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return index

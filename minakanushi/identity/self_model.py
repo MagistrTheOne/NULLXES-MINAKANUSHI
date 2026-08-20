@@ -20,6 +20,16 @@ from minakanushi.memory.action_outcome import ActionOutcomeLog
 from minakanushi.state.correction import CorrectionEvent
 
 
+def _portable(value):
+    if isinstance(value, tuple):
+        return [_portable(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _portable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_portable(item) for item in value]
+    return value
+
+
 @dataclass
 class IdentityBlock:
     architecture_name: str = ARCHITECTURE_NAME
@@ -96,22 +106,24 @@ class SelfModel:
         _ = corrections
 
     def to_dict(self) -> dict:
-        return {
-            "identity": asdict(self.identity),
-            "instance": asdict(self.instance),
-            "embodiment": asdict(self.embodiment),
-            "authority_mode": self.authority_mode,
-            "policy_enabled": self.policy_enabled,
-            "operator_connected": self.operator_connected,
-            "objectives": asdict(self.objectives),
-            "constraints": {
-                "active_constraints": list(self.constraints.active_constraints),
-                "hard_limits": list(self.constraints.hard_limits),
-            },
-            "runtime": asdict(self.runtime),
-            "experience": self.experience.to_dict(),
-            "action_outcomes": self.action_outcomes.to_dict(),
-        }
+        return _portable(
+            {
+                "identity": asdict(self.identity),
+                "instance": asdict(self.instance),
+                "embodiment": asdict(self.embodiment),
+                "authority_mode": self.authority_mode,
+                "policy_enabled": self.policy_enabled,
+                "operator_connected": self.operator_connected,
+                "objectives": asdict(self.objectives),
+                "constraints": {
+                    "active_constraints": list(self.constraints.active_constraints),
+                    "hard_limits": list(self.constraints.hard_limits),
+                },
+                "runtime": asdict(self.runtime),
+                "experience": self.experience.to_dict(),
+                "action_outcomes": self.action_outcomes.to_dict(),
+            }
+        )
 
     @classmethod
     def from_dict(cls, raw: dict) -> SelfModel:
