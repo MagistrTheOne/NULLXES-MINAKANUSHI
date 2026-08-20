@@ -53,6 +53,12 @@ def fuse(belief: Tensor, evidence: Tensor, w_belief: Tensor, w_evidence: Tensor)
     return (w_belief * belief + w_evidence * evidence) / denom
 
 
+def _scalar(value: Tensor | float | int) -> float:
+    if torch.is_tensor(value):
+        return float(value.detach())
+    return float(value)
+
+
 def midpoint_is_wrong(belief: float, evidence: float, result: float) -> bool:
     mid = 0.5 * (belief + evidence)
     return abs(result - mid) > abs(result - evidence) * 0.25
@@ -106,34 +112,36 @@ def revise_slot(
         w_b = source_reliability(old_confidence, belief_age_seconds)
         xy = fuse(old_xy, evidence_xy, w_b, w_e)
         vel = fuse(old_vel, evidence_vel, w_b, w_e)
-        reason = "evidence_dominance" if float(w_e) >= float(w_b) else "prior_retained"
-        if float(delta) >= REVISION_MAGNITUDE:
+        reason = "evidence_dominance" if _scalar(w_e) >= _scalar(w_b) else "prior_retained"
+        if _scalar(delta) >= REVISION_MAGNITUDE:
             reason = "hypothesis_revision"
 
     conf = torch.maximum(old_confidence, evidence_confidence)
     if reason == "hypothesis_revision":
         conf = 0.5 * old_confidence + 0.5 * evidence_confidence
         conf = torch.minimum(conf + 0.2 * evidence_confidence, evidence_confidence.new_tensor(1.0))
-    conflict = (delta_xy / 2.0).clamp(0.0, 1.0)
-    if float(delta_vel) > float(delta_xy):
-        conflict = (delta_vel / 2.0).clamp(0.0, 1.0)
+    conflict = torch.where(
+        delta_vel > delta_xy,
+        (delta_vel / 2.0).clamp(0.0, 1.0),
+        (delta_xy / 2.0).clamp(0.0, 1.0),
+    )
     event = None
-    if reason != "tracking" and float(delta) >= REVISION_MAGNITUDE:
+    if reason != "tracking" and _scalar(delta) >= REVISION_MAGNITUDE:
         event = CorrectionEvent(
             entity_id=int(entity_id),
-            old_xy=(float(old_xy[0]), float(old_xy[1])),
-            new_xy=(float(xy[0]), float(xy[1])),
-            old_vel=(float(old_vel[0]), float(old_vel[1])),
-            new_vel=(float(vel[0]), float(vel[1])),
-            old_confidence=float(old_confidence),
-            new_confidence=float(conf),
-            old_uncertainty=float(old_uncertainty.mean() if old_uncertainty.ndim > 0 else old_uncertainty),
-            new_uncertainty=float(conflict),
+            old_xy=(_scalar(old_xy[0]), _scalar(old_xy[1])),
+            new_xy=(_scalar(xy[0]), _scalar(xy[1])),
+            old_vel=(_scalar(old_vel[0]), _scalar(old_vel[1])),
+            new_vel=(_scalar(vel[0]), _scalar(vel[1])),
+            old_confidence=_scalar(old_confidence),
+            new_confidence=_scalar(conf),
+            old_uncertainty=_scalar(old_uncertainty.mean() if old_uncertainty.ndim > 0 else old_uncertainty),
+            new_uncertainty=_scalar(conflict),
             evidence_source=evidence_source,
             correction_reason=reason,
-            correction_magnitude=float(delta),
-            evidence_weight=float(w_e),
-            belief_weight=float(w_b),
+            correction_magnitude=_scalar(delta),
+            evidence_weight=_scalar(w_e),
+            belief_weight=_scalar(w_b),
         )
     return Revision(
         xy=xy,

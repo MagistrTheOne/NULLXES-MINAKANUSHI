@@ -60,3 +60,38 @@ def test_activation_checkpoint_forward_backward_on_cpu_dev() -> None:
     grads = [p.grad for p in system.world_core.parameters() if p.grad is not None]
     assert grads
     assert all(torch.isfinite(g).all() for g in grads)
+
+
+def test_dwc_checkpoint_passes_amp_recompute_context() -> None:
+    text = (ROOT / "minakanushi" / "core" / "dynamic_world_core.py").read_text(encoding="utf-8")
+    assert "context_fn=activation_checkpoint_contexts" in text
+
+
+def test_activation_checkpoint_contexts_without_amp_are_noop() -> None:
+    from minakanushi.core.dynamic_world_core import activation_checkpoint_contexts
+
+    fwd, rec = activation_checkpoint_contexts()
+    with fwd:
+        with rec:
+            value = torch.ones(2)
+    assert value.shape == (2,)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="bf16 autocast checkpoint")
+def test_checkpoint_backward_outside_autocast_keeps_bf16() -> None:
+    from minakanushi.core.dynamic_world_core import activation_checkpoint_contexts
+
+    device = torch.device("cuda")
+    layer = torch.nn.Sequential(torch.nn.Linear(8, 8), torch.nn.SiLU(), torch.nn.Linear(8, 8)).to(device)
+    inputs = torch.randn(2, 8, device=device, dtype=torch.float32, requires_grad=True)
+    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        out = torch.utils.checkpoint.checkpoint(
+            layer,
+            inputs,
+            use_reentrant=False,
+            context_fn=activation_checkpoint_contexts,
+        )
+    out.float().pow(2).mean().backward()
+    grad = layer[0].weight.grad
+    assert grad is not None
+    assert torch.isfinite(grad).all()

@@ -10,8 +10,12 @@ the kinematic prior.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+from typing import Any
+
 import torch
 from torch import Tensor, nn
+from torch.utils.checkpoint import checkpoint
 
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.mina_unit import MinaUnitBatch
@@ -21,6 +25,37 @@ from minakanushi.core.convergence import slot_delta
 from minakanushi.core.recurrent_state import clone_world
 from minakanushi.state.world import BELIEF_STD_MIN, WorldState
 from minakanushi.utils.tensors import assert_finite, assert_shape
+
+
+def activation_checkpoint_contexts() -> tuple[Any, Any]:
+    """(forward, recompute) contexts for non-reentrant checkpoint.
+
+    Trainer runs unroll under autocast and backward outside it. Checkpoint
+    recomputes CognitiveBlock in backward; without restoring AMP, saved bf16
+    activations fail the metadata check against fp32 recomputes.
+    """
+    for device_type in ("cuda", "cpu"):
+        if not _autocast_enabled(device_type):
+            continue
+        dtype = _autocast_dtype(device_type)
+        return nullcontext(), torch.autocast(device_type=device_type, dtype=dtype)
+    return nullcontext(), nullcontext()
+
+
+def _autocast_enabled(device_type: str) -> bool:
+    try:
+        return bool(torch.is_autocast_enabled(device_type))
+    except TypeError:
+        return bool(torch.is_autocast_enabled()) if device_type == "cuda" else False
+
+
+def _autocast_dtype(device_type: str) -> torch.dtype:
+    try:
+        return torch.get_autocast_dtype(device_type)
+    except (TypeError, AttributeError):
+        if device_type != "cuda":
+            return torch.bfloat16
+        return torch.get_autocast_gpu_dtype()
 
 
 class DynamicWorldCore(nn.Module):
@@ -65,13 +100,14 @@ class DynamicWorldCore(nn.Module):
             updated = previous
             for block in self.blocks:
                 if self.training and self.activation_checkpoint:
-                    updated = torch.utils.checkpoint.checkpoint(
+                    updated = checkpoint(
                         block,
                         updated,
                         fused_obs,
                         state.occupied,
                         units.mask,
                         use_reentrant=False,
+                        context_fn=activation_checkpoint_contexts,
                     )
                 else:
                     updated = block(updated, fused_obs, state.occupied, units.mask)

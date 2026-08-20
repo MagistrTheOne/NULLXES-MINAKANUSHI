@@ -43,3 +43,26 @@ def test_revision_after_gap_records_correction_event() -> None:
     assert out.event.correction_reason in {"hypothesis_revision", "evidence_dominance"}
     assert out.event.old_vel[0] < -0.1
     assert abs(out.event.new_vel[0]) < abs(out.event.old_vel[0])
+
+
+def test_revise_slot_does_not_warn_on_grad_tensors() -> None:
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        revise_slot(
+            entity_id=11,
+            old_xy=torch.tensor([2.5, 1.0], requires_grad=True),
+            old_vel=torch.tensor([-0.8, 0.0], requires_grad=True),
+            old_confidence=torch.tensor(0.9, requires_grad=True),
+            old_uncertainty=torch.ones(8) * 0.2,
+            evidence_xy=torch.tensor([2.5, 1.0]),
+            evidence_vel=torch.tensor([0.0, 0.0]),
+            evidence_confidence=torch.tensor(0.95),
+            evidence_uncertainty=torch.tensor(0.05),
+            belief_age_seconds=torch.tensor(0.5),
+            evidence_age_seconds=torch.tensor(0.0),
+            observed_last_cycle=False,
+            evidence_source="camera",
+        )
+    assert not any("requires_grad=True to a scalar" in str(item.message) for item in caught)
