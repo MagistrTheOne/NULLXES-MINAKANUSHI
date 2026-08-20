@@ -13,8 +13,11 @@ from minakanushi.architecture.config import load_architecture, load_training
 from minakanushi.training.parallel import (
     collect_full_checkpoint,
     init_process_group_if_needed,
+    is_fsdp_dtensor,
     is_fsdp_wrapped,
     plan_from_training,
+    register_replicated_grad_sync,
+    replicated_trainable_parameters,
     training_device,
     wrap_fsdp2,
 )
@@ -126,6 +129,7 @@ def test_wrap_fsdp2_shards_cognitive_blocks_not_root(monkeypatch) -> None:
 
     monkeypatch.setattr("torch.distributed.is_available", lambda: True)
     monkeypatch.setattr("torch.distributed.is_initialized", lambda: True)
+    monkeypatch.setattr("torch.distributed.get_world_size", lambda: 2)
     import torch.distributed.fsdp as fsdp
 
     monkeypatch.setattr(fsdp, "MixedPrecisionPolicy", _FakeMP, raising=False)
@@ -139,3 +143,64 @@ def test_wrap_fsdp2_shards_cognitive_blocks_not_root(monkeypatch) -> None:
     assert all(isinstance(mod, CognitiveBlock) for mod in sharded)
     assert system not in sharded
     assert system.perception not in sharded
+    leftovers = replicated_trainable_parameters(system)
+    leftover_ids = {id(param) for param in leftovers}
+    assert leftovers
+    assert all(id(param) in leftover_ids for param in system.perception.parameters())
+    assert all(id(param) in leftover_ids for param in system.position_field.parameters())
+    assert all(id(param) in leftover_ids for param in system.memory.parameters())
+    assert all(id(param) in leftover_ids for param in system.uncertainty.parameters())
+    assert all(id(param) in leftover_ids for param in system.future.parameters())
+    weight = next(system.perception.parameters())
+    hooks = getattr(weight, "_post_accumulate_grad_hooks", None) or getattr(weight, "_backward_hooks", None)
+    assert hooks
+
+
+def test_is_fsdp_dtensor_rejects_plain_tensor() -> None:
+    assert is_fsdp_dtensor(torch.ones(2)) is False
+
+
+def test_replicated_grad_sync_allreduces_leftover_params(monkeypatch) -> None:
+    reduced: list[torch.Tensor] = []
+
+    def fake_all_reduce(tensor, op=None):
+        reduced.append(tensor.detach().clone())
+
+    monkeypatch.setattr("torch.distributed.is_available", lambda: True)
+    monkeypatch.setattr("torch.distributed.is_initialized", lambda: True)
+    monkeypatch.setattr("torch.distributed.get_world_size", lambda: 2)
+    monkeypatch.setattr("torch.distributed.all_reduce", fake_all_reduce)
+
+    class Leftovers(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.perception = nn.Linear(4, 2)
+            self.memory = nn.Linear(4, 2)
+
+    module = Leftovers()
+    hooked = register_replicated_grad_sync(module)
+    assert hooked == 4
+    loss = module.perception(torch.ones(1, 4)).sum() + module.memory(torch.ones(1, 4)).sum()
+    loss.backward()
+    assert len(reduced) == 4
+    assert module.perception.weight.grad is not None
+    averaged = module.perception.weight.grad.detach()
+    matches = [
+        item
+        for item in reduced
+        if item.shape == averaged.shape and torch.allclose(averaged * 2, item)
+    ]
+    assert matches
+
+
+def test_replicated_params_skip_dtensor_name(monkeypatch) -> None:
+    dense = nn.Linear(2, 2)
+    assert replicated_trainable_parameters(dense)
+    monkeypatch.setattr(
+        "minakanushi.training.parallel.is_fsdp_dtensor",
+        lambda parameter: parameter is dense.weight,
+    )
+    leftover = replicated_trainable_parameters(dense)
+    leftover_ids = {id(param) for param in leftover}
+    assert id(dense.weight) not in leftover_ids
+    assert id(dense.bias) in leftover_ids

@@ -226,8 +226,71 @@ def apply_full_checkpoint(module: nn.Module, optimizer: Optimizer | None, payloa
         optimizer.load_state_dict(payload["optimizer"])
 
 
+def is_fsdp_dtensor(parameter: torch.Tensor) -> bool:
+    return type(parameter).__name__ == "DTensor"
+
+
+def replicated_trainable_parameters(module: nn.Module) -> list[nn.Parameter]:
+    """Trainable weights FSDP2 CognitiveBlock wrap does not own."""
+    seen: set[int] = set()
+    out: list[nn.Parameter] = []
+    for parameter in module.parameters():
+        if not parameter.requires_grad or is_fsdp_dtensor(parameter):
+            continue
+        marker = id(parameter)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(parameter)
+    return out
+
+
+def register_replicated_grad_sync(module: nn.Module, world_size: int | None = None) -> int:
+    """Average grads on replicated modules so multi-GPU 6.8B does not diverge.
+
+    Trainer calls perception.encode, memory.hints, and future.predict — not
+    FSDPModule.forward. Root fully_shard therefore cannot return: those paths
+    mix dense CUDA tensors with DTensor weights. CognitiveBlock stays ZeRO-3.
+    Remaining trainable weights stay dense and must all-reduce.
+    """
+    import torch.distributed as dist
+
+    if not dist.is_available() or not dist.is_initialized():
+        raise RuntimeError("replicated grad sync requires torchrun / init_process_group")
+    size = int(dist.get_world_size() if world_size is None else world_size)
+    if size < 1:
+        raise ValueError(f"world_size must be >= 1, got {size}")
+    hooked = 0
+    for parameter in replicated_trainable_parameters(module):
+        _attach_replicated_grad_hook(parameter, size)
+        hooked += 1
+    return hooked
+
+
+def _attach_replicated_grad_hook(parameter: nn.Parameter, world_size: int) -> None:
+    import torch.distributed as dist
+
+    def _allreduce_grad(grad: torch.Tensor) -> torch.Tensor:
+        if world_size <= 1:
+            return grad
+        dist.all_reduce(grad, op=dist.ReduceOp.SUM)
+        return grad / world_size
+
+    if hasattr(parameter, "register_post_accumulate_grad_hook"):
+
+        def _post_hook(param: torch.Tensor) -> None:
+            if param.grad is None or world_size <= 1:
+                return
+            dist.all_reduce(param.grad, op=dist.ReduceOp.SUM)
+            param.grad.div_(world_size)
+
+        parameter.register_post_accumulate_grad_hook(_post_hook)
+        return
+    parameter.register_hook(_allreduce_grad)
+
+
 def wrap_fsdp2(module: nn.Module) -> nn.Module:
-    """ZeRO-3 equivalent: fully shard params, grads, optimizer state.
+    """ZeRO-3 on CognitiveBlock plus averaged grads on replicated leftovers.
 
     Requires torch.distributed already initialized (torchrun).
     """
@@ -249,4 +312,5 @@ def wrap_fsdp2(module: nn.Module) -> nn.Module:
     # Do not fully_shard MinakanushiSystem. Root wrap turns perception/NPF
     # Linear weights into DTensors; encode() feeds dense CUDA tensors and
     # aten.addmm then raises mixed Tensor/DTensor. ZeRO-3 lives in DWC blocks.
+    register_replicated_grad_sync(module)
     return module
