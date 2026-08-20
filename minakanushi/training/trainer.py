@@ -24,8 +24,9 @@ from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.checkpoint import save_mina
 from minakanushi.training.metrics import assemble_bundle, memory_effect_delta, policy_firewall_metrics
 from minakanushi.training.objectives import compute_objectives
+from minakanushi.training.parallel import collect_full_checkpoint, dist_barrier, is_rank0, training_device
 from minakanushi.utils.seed import seed_everything
-from minakanushi.utils.tensors import assert_finite, resolve_device, resolve_dtype
+from minakanushi.utils.tensors import assert_finite, resolve_dtype
 from minakanushi.training.revision import evidence_for_slots, should_revise_mask
 from simulations.synthetic_world.dataset import TRAIN_CURRICULUM, generate_episode, training_frame
 
@@ -136,7 +137,7 @@ class Trainer:
         self.config = config
         self.root = root
         seed_everything(config.training.seed)
-        self.device = resolve_device(config.training.device)
+        self.device = training_device(config.training.device)
         self.dtype = resolve_dtype(config.training.precision)
         # Weights stay fp32. AMP downcasts CUDA matmuls. Feeding bf16 tensors
         # into fp32 Linear raises: mat1 BFloat16 / mat2 Float.
@@ -449,26 +450,30 @@ class Trainer:
             log = self.step_once(step)
             logs.append(log)
             if step % train.log_every == 0 or step == 1:
-                print(
-                    f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} "
-                    f"grad={log.grad_norm:.4f} fwd={self._last_forward_s:.3f}s "
-                    f"bwd={self._last_backward_s:.3f}s terms={log.terms}",
-                    flush=True,
-                )
-            if log.metrics is not None:
+                if is_rank0():
+                    print(
+                        f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} "
+                        f"grad={log.grad_norm:.4f} fwd={self._last_forward_s:.3f}s "
+                        f"bwd={self._last_backward_s:.3f}s terms={log.terms}",
+                        flush=True,
+                    )
+            if log.metrics is not None and is_rank0():
                 with metrics_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "metrics": log.metrics}) + "\n")
                 print(f"metrics step={step} {log.metrics}", flush=True)
             abort_reason = _diagnose_run(logs)
             if abort_reason is not None:
-                print(f"ABORT {abort_reason}", flush=True)
+                if is_rank0():
+                    print(f"ABORT {abort_reason}", flush=True)
                 break
             if step % train.checkpoint_every == 0 or step == train.steps:
+                gathered = collect_full_checkpoint(self.system, self.opt)
                 save_mina(
                     out_dir / f"minakanushi_stage{train.stage}_step{step}.mina",
                     self.system,
                     optimizer=self.opt,
                     shard_max_bytes=int(train.shard_max_bytes),
+                    gathered=gathered,
                     extras={
                         "stage": train.stage,
                         "step": step,
@@ -481,34 +486,37 @@ class Trainer:
                     },
                 )
         last = logs[-1]
-        torch.save(
-            {
-                "seed": train.seed,
-                "n_overfit_episodes": train.n_overfit_episodes,
-                "sequence_length": train.sequence_length,
-                "step": last.step,
-                "loss": last.loss,
-                "entity_xy": None,
-            },
-            out_dir / "reference_meta.pt",
-        )
+        if is_rank0():
+            torch.save(
+                {
+                    "seed": train.seed,
+                    "n_overfit_episodes": train.n_overfit_episodes,
+                    "sequence_length": train.sequence_length,
+                    "step": last.step,
+                    "loss": last.loss,
+                    "entity_xy": None,
+                },
+                out_dir / "reference_meta.pt",
+            )
         # Frozen inference snapshot from a deterministic episode for reload comparison.
         with torch.no_grad():
             self.system.eval()
             with self._amp():
                 pkt = self.unroll(1)
-            torch.save(
-                {
-                    "seed": train.seed,
-                    "episode_index": pkt.episode_index,
-                    "frame_index": pkt.frame_index,
-                    "entity_xy": pkt.pred.entity_xy.detach().cpu(),
-                    "latent_state": pkt.pred.latent_state.detach().cpu(),
-                    "future_terminal": pkt.pred_future[:, -1].detach().cpu(),
-                },
-                out_dir / "reference_inference.pt",
-            )
+            if is_rank0():
+                torch.save(
+                    {
+                        "seed": train.seed,
+                        "episode_index": pkt.episode_index,
+                        "frame_index": pkt.frame_index,
+                        "entity_xy": pkt.pred.entity_xy.detach().cpu(),
+                        "latent_state": pkt.pred.latent_state.detach().cpu(),
+                        "future_terminal": pkt.pred_future[:, -1].detach().cpu(),
+                    },
+                    out_dir / "reference_inference.pt",
+                )
             self.system.train()
+        dist_barrier()
         if abort_reason is not None:
             raise RuntimeError(abort_reason)
         return logs

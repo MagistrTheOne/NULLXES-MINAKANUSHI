@@ -23,12 +23,12 @@ def assert_shape(name: str, tensor: Tensor, expected: tuple[int, ...]) -> None:
 
 
 def resolve_device(name: str) -> torch.device:
-    if name == "cuda":
+    if name == "cpu" or name.startswith("cpu:"):
+        return torch.device("cpu") if name == "cpu" else torch.device(name)
+    if name == "cuda" or name.startswith("cuda:"):
         if not torch.cuda.is_available():
             raise RuntimeError("config requested cuda but torch.cuda.is_available() is False")
-        return torch.device("cuda")
-    if name == "cpu":
-        return torch.device("cpu")
+        return torch.device(name if ":" in name else "cuda")
     raise ValueError(f"unsupported device '{name}'")
 
 

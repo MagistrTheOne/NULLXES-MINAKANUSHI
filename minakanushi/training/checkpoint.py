@@ -15,6 +15,7 @@ from torch.optim import Optimizer
 
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.model import MinakanushiSystem
+from minakanushi.training.parallel import apply_full_checkpoint, dist_barrier, is_rank0
 from minakanushi.training.shard import merge_tensor_maps, split_tensor_map
 
 
@@ -97,20 +98,39 @@ def save_mina(
     extras: dict | None = None,
     tensors: dict | None = None,
     shard_max_bytes: int = 0,
+    gathered: dict | None = None,
 ) -> Path:
+    """Write *.mina from a full CPU payload.
+
+    When torch.distributed is initialized, only rank 0 writes. Callers that wrap
+    with FSDP2 must pass `gathered` from collect_full_checkpoint() so this does
+    not persist a local shard via system.state_dict().
+    """
     path = Path(path)
     if path.suffix != ".mina":
         raise ValueError(f"checkpoint must use .mina suffix, got {path}")
+    if not is_rank0():
+        dist_barrier()
+        return path
     path.parent.mkdir(parents=True, exist_ok=True)
+    if gathered is None:
+        payload = {
+            "system": system.state_dict(),
+            "parameter_report": system.parameter_report(),
+            "optimizer": optimizer.state_dict() if optimizer is not None else None,
+            "runtime": tensors,
+        }
+    else:
+        payload = {
+            "system": gathered["system"],
+            "parameter_report": gathered.get("parameter_report") or system.parameter_report(),
+            "optimizer": gathered.get("optimizer"),
+            "runtime": tensors if tensors is not None else gathered.get("runtime"),
+        }
     manifest = build_manifest(system.config, extras)
-    payload = {
-        "system": system.state_dict(),
-        "parameter_report": system.parameter_report(),
-        "optimizer": optimizer.state_dict() if optimizer is not None else None,
-        "runtime": tensors,
-    }
     sharded = int(shard_max_bytes) > 0
     manifest["sharded"] = sharded
+    manifest["fsdp_gathered"] = bool(gathered is not None and gathered.get("gathered"))
     if sharded:
         system_shards = split_tensor_map(payload["system"], int(shard_max_bytes))
         manifest["n_system_shards"] = len(system_shards)
@@ -125,6 +145,7 @@ def save_mina(
             _write_zip_bytes(zf, "weights/sidecar.pt", rest)
         else:
             _write_zip_bytes(zf, WEIGHTS_NAME, payload)
+    dist_barrier()
     return path
 
 
@@ -177,13 +198,7 @@ def load_mina(
             )
             payload = dict(sidecar)
             payload["system"] = merge_tensor_maps(shards)
-    incompatible = system.load_state_dict(payload["system"], strict=True)
-    if incompatible.missing_keys or incompatible.unexpected_keys:
-        raise ValueError(f"strict load failed: {incompatible}")
-    if optimizer is not None:
-        if payload.get("optimizer") is None:
-            raise ValueError("checkpoint has no optimizer state; refusing silent resume")
-        optimizer.load_state_dict(payload["optimizer"])
+    apply_full_checkpoint(system, optimizer, payload)
     if return_payload:
         return manifest, payload
     return manifest

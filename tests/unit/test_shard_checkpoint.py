@@ -49,3 +49,19 @@ def test_sharded_mina_resume_and_validation_restore(tmp_path: Path) -> None:
     assert payload["optimizer"] is not None
     for key, tensor in before.items():
         assert torch.equal(tensor, fresh.state_dict()[key])
+
+
+def test_save_mina_non_rank0_does_not_write_or_dump_state_dict(tmp_path, monkeypatch) -> None:
+    cfg = cpu_config()
+    system = MinakanushiSystem(cfg.architecture)
+
+    def boom(_self):
+        raise AssertionError("non-rank0 must not call state_dict")
+
+    monkeypatch.setattr("minakanushi.training.checkpoint.is_rank0", lambda: False)
+    monkeypatch.setattr("minakanushi.training.checkpoint.dist_barrier", lambda: None)
+    monkeypatch.setattr(type(system), "state_dict", boom)
+    path = tmp_path / "rank1.mina"
+    saved = save_mina(path, system, gathered=None)
+    assert saved == path
+    assert not path.exists()
