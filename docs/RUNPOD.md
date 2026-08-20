@@ -20,7 +20,9 @@ python scripts/gate03b_hidden_direction.py \
   --out experiments/gate03b
 ```
 
-Fill `docs/GATE_03B_HIDDEN_DIRECTION_REPORT.md` from the JSON. STOP POD.
+Fill `docs/GATE_03B_HIDDEN_DIRECTION_REPORT.md` from the JSON.
+Do **not** terminate the Community Cloud pod mid-run (the machine is gone).
+Detach with `nohup`. Terminate only after the JSON is copied.
 
 Closed: 6.8B, H200, humanoid, Yunmu, architecture edit, λ change.
 
