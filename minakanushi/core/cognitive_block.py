@@ -8,8 +8,11 @@ decoder-only transformer and does not use causal token attention.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import torch
 from torch import Tensor, nn
+from torch.utils.checkpoint import checkpoint
 
 from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.utils.tensors import assert_finite, assert_shape
@@ -35,6 +38,8 @@ class CognitiveBlock(nn.Module):
         )
         self.gate = nn.Linear(dim * 2, dim)
         self.drop = nn.Dropout(config.dropout)
+        self.activation_checkpoint = False
+        self.amp_dtype: torch.dtype | None = None
 
     def forward(
         self,
@@ -49,7 +54,48 @@ class CognitiveBlock(nn.Module):
         occupied:            [B, N_world]
         observation_mask:    [B, N_obs]
         """
-        batch, n_world, dim = world_latent.shape
+        # Checkpoint inner compute, not the FSDP module from DWC. Outer
+        # checkpoint(FSDPBlock) saved bf16 under MixedPrecisionPolicy then
+        # recomputed fp32 after FSDP disabled autocast.
+        if self.training and self.activation_checkpoint:
+            return checkpoint(
+                self._compute_with_amp,
+                world_latent,
+                observation_latent,
+                occupied,
+                observation_mask,
+                use_reentrant=False,
+            )
+        return self._compute_with_amp(
+            world_latent,
+            observation_latent,
+            occupied,
+            observation_mask,
+        )
+
+    def _compute_with_amp(
+        self,
+        world_latent: Tensor,
+        observation_latent: Tensor,
+        occupied: Tensor,
+        observation_mask: Tensor,
+    ) -> Tensor:
+        amp = (
+            torch.autocast(device_type="cuda", dtype=self.amp_dtype)
+            if self.amp_dtype is not None and world_latent.is_cuda
+            else nullcontext()
+        )
+        with amp:
+            return self._compute(world_latent, observation_latent, occupied, observation_mask)
+
+    def _compute(
+        self,
+        world_latent: Tensor,
+        observation_latent: Tensor,
+        occupied: Tensor,
+        observation_mask: Tensor,
+    ) -> Tensor:
+        batch, _n_world, dim = world_latent.shape
         assert_shape("observation_latent", observation_latent, (batch, -1, dim))
         slots = self.slot_norm(world_latent)
         obs = self.obs_norm(observation_latent)

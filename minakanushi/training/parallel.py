@@ -299,16 +299,18 @@ def wrap_fsdp2(module: nn.Module) -> nn.Module:
     if not dist.is_available() or not dist.is_initialized():
         raise RuntimeError("FSDP2 fully_shard requires torchrun / init_process_group")
     try:
-        from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
+        from torch.distributed.fsdp import fully_shard
     except ImportError as exc:
         raise RuntimeError("PyTorch FSDP2 fully_shard is required for 6.8B") from exc
 
     from minakanushi.core.cognitive_block import CognitiveBlock
 
-    mp = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32)
+    # Do not pass param_dtype=bf16. Trainer keeps fp32 weights and downcasts
+    # matmuls with autocast. FSDP MixedPrecisionPolicy on the outer block
+    # saved bf16 activations then recomputed fp32 inside activation checkpoint.
     for child in module.modules():
         if isinstance(child, CognitiveBlock):
-            fully_shard(child, mp_policy=mp)
+            fully_shard(child)
     # Do not fully_shard MinakanushiSystem. Root wrap turns perception/NPF
     # Linear weights into DTensors; encode() feeds dense CUDA tensors and
     # aten.addmm then raises mixed Tensor/DTensor. ZeRO-3 lives in DWC blocks.

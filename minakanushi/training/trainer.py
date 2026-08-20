@@ -150,6 +150,8 @@ class Trainer:
             from minakanushi.training.parallel import wrap_fsdp2
 
             self.system = wrap_fsdp2(self.system)
+        if self._amp_enabled:
+            self.system.world_core.checkpoint_amp_dtype = self.dtype
         self.constructor = StateConstructor(config.architecture)
         self.opt = torch.optim.AdamW(
             self.system.parameters(),

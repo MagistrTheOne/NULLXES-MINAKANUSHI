@@ -119,10 +119,6 @@ def test_wrap_fsdp2_shards_cognitive_blocks_not_root(monkeypatch) -> None:
 
     sharded: list[nn.Module] = []
 
-    class _FakeMP:
-        def __init__(self, **_kwargs) -> None:
-            return
-
     def fake_fully_shard(mod, mp_policy=None):
         sharded.append(mod)
         return mod
@@ -132,7 +128,6 @@ def test_wrap_fsdp2_shards_cognitive_blocks_not_root(monkeypatch) -> None:
     monkeypatch.setattr("torch.distributed.get_world_size", lambda: 2)
     import torch.distributed.fsdp as fsdp
 
-    monkeypatch.setattr(fsdp, "MixedPrecisionPolicy", _FakeMP, raising=False)
     monkeypatch.setattr(fsdp, "fully_shard", fake_fully_shard, raising=False)
 
     arch = load_architecture(ROOT / "configs" / "architecture" / "cpu_dev.yaml")

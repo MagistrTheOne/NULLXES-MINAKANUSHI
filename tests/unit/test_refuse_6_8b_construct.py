@@ -63,35 +63,69 @@ def test_activation_checkpoint_forward_backward_on_cpu_dev() -> None:
 
 
 def test_dwc_checkpoint_passes_amp_recompute_context() -> None:
-    text = (ROOT / "minakanushi" / "core" / "dynamic_world_core.py").read_text(encoding="utf-8")
-    assert "context_fn=activation_checkpoint_contexts" in text
+    block = (ROOT / "minakanushi" / "core" / "cognitive_block.py").read_text(encoding="utf-8")
+    dwc = (ROOT / "minakanushi" / "core" / "dynamic_world_core.py").read_text(encoding="utf-8")
+    parallel = (ROOT / "minakanushi" / "training" / "parallel.py").read_text(encoding="utf-8")
+    trainer = (ROOT / "minakanushi" / "training" / "trainer.py").read_text(encoding="utf-8")
+    assert "checkpoint(" in block
+    assert "_compute_with_amp" in block
+    assert "from torch.utils.checkpoint import checkpoint" not in dwc
+    assert "use_reentrant" not in dwc
+    assert "param_dtype=torch.bfloat16" not in parallel
+    assert "checkpoint_amp_dtype" in trainer
 
 
-def test_activation_checkpoint_contexts_without_amp_are_noop() -> None:
-    from minakanushi.core.dynamic_world_core import activation_checkpoint_contexts
-
-    fwd, rec = activation_checkpoint_contexts()
-    with fwd:
-        with rec:
-            value = torch.ones(2)
-    assert value.shape == (2,)
+def test_activation_checkpoint_propagates_to_blocks() -> None:
+    cfg = cpu_config().architecture
+    system = MinakanushiSystem(cfg)
+    assert system.world_core.blocks[0].activation_checkpoint is False
+    system.world_core.activation_checkpoint = True
+    system.world_core.checkpoint_amp_dtype = torch.bfloat16
+    assert all(block.activation_checkpoint for block in system.world_core.blocks)
+    assert all(block.amp_dtype is torch.bfloat16 for block in system.world_core.blocks)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="bf16 autocast checkpoint")
 def test_checkpoint_backward_outside_autocast_keeps_bf16() -> None:
-    from minakanushi.core.dynamic_world_core import activation_checkpoint_contexts
-
+    cfg = cpu_config().architecture
+    system = MinakanushiSystem(cfg).to("cuda")
+    system.train()
+    system.world_core.activation_checkpoint = True
+    system.world_core.checkpoint_amp_dtype = torch.bfloat16
     device = torch.device("cuda")
-    layer = torch.nn.Sequential(torch.nn.Linear(8, 8), torch.nn.SiLU(), torch.nn.Linear(8, 8)).to(device)
-    inputs = torch.randn(2, 8, device=device, dtype=torch.float32, requires_grad=True)
+    dtype = torch.float32
+    obs = Observation(
+        timestamp=0.0,
+        agent_xy=(1.0, 1.0),
+        agent_vel=(0.0, 0.0),
+        heading=0.0,
+        health=1.0,
+        battery=1.0,
+        visible=({"id": 2, "kind": "mover", "xy": (2.0, 1.0), "vel": (0.1, 0.0)},),
+        occluded_ids=(),
+        noise_std=0.0,
+        arrival_time=0.0,
+        source_rate_telemetry=20.0,
+        source_rate_vector=10.0,
+    )
+    units = system.perception.encode(obs, device=device, dtype=dtype)
+    batch = pack_units(
+        units,
+        batch_index=0,
+        max_units=cfg.max_observations,
+        latent_dim=cfg.latent_dim,
+        episode_position=0.0,
+        now=0.0,
+        device=device,
+        dtype=dtype,
+    )
+    world = empty_world_state(cfg, 1, device=device, dtype=dtype)
+    world.occupied[0, 0] = True
+    world.entity_id[0, 0] = 1
+    hints = torch.zeros_like(world.latent_state)
     with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-        out = torch.utils.checkpoint.checkpoint(
-            layer,
-            inputs,
-            use_reentrant=False,
-            context_fn=activation_checkpoint_contexts,
-        )
-    out.float().pow(2).mean().backward()
-    grad = layer[0].weight.grad
-    assert grad is not None
-    assert torch.isfinite(grad).all()
+        _, core = system.observe_to_core(batch, world, hints)
+    core.world_state.latent_state.float().pow(2).mean().backward()
+    grads = [p.grad for p in system.world_core.parameters() if p.grad is not None]
+    assert grads
+    assert all(torch.isfinite(g).all() for g in grads)
