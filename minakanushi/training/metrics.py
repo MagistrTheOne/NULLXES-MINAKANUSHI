@@ -59,6 +59,69 @@ def memory_effect_delta(with_memory: Tensor, without_memory: Tensor, mask: Tenso
     return (with_memory - without_memory).pow(2).mul(w).sum() / w.sum().clamp_min(1.0)
 
 
+def count_hard_violations(candidate, trajectories, simulation) -> int:
+    """Count HARD rule failures on (candidate, each predicted branch)."""
+    from minakanushi.constraints.rule import ConstraintClass, RULE_REGISTRY
+
+    rules = tuple(RULE_REGISTRY[name]() for name in simulation.hard_constraints if name in RULE_REGISTRY)
+    checks = list(trajectories) if trajectories else [None]
+    n = 0
+    for traj in checks:
+        for rule in rules:
+            if rule.cls != ConstraintClass.HARD:
+                continue
+            ok, _ = rule.evaluate(candidate, traj, simulation)
+            if not ok:
+                n += 1
+    return n
+
+
+def closed_loop_success(simulation, intent, agent_xy, agent_vel, timestamp: float) -> float:
+    """One observe-after-act cycle. 1.0 only if time advances, agent stays in arena, and the executed command passes HARD rules."""
+    import numpy as np
+
+    from minakanushi.strategy.candidate import StrategyCandidate
+    from simulations.synthetic_world.world import SyntheticWorld
+
+    world = SyntheticWorld(simulation, seed=0)
+    world.agent.xy = np.array(agent_xy, dtype=np.float64)
+    world.agent.vel = np.array(agent_vel, dtype=np.float64)
+    world.t = float(timestamp)
+    t0 = world.t
+    world.step(intent)
+    nxt = world.observe()
+    if nxt.timestamp <= t0:
+        return 0.0
+    x, y = float(world.agent.xy[0]), float(world.agent.xy[1])
+    x0, x1, y0, y1 = simulation.arena
+    if x < x0 or x > x1 or y < y0 or y > y1:
+        return 0.0
+    executed = StrategyCandidate(intent.strategy_id, intent.objective, intent.target_state, 0.0, 0.0)
+    if count_hard_violations(executed, (), simulation) > 0:
+        return 0.0
+    return 1.0
+
+
+def policy_firewall_metrics(kernel, policy, candidates, trajectories, simulation, goal_xy, now, agent_xy, agent_vel) -> tuple[int, float]:
+    """Measure selected-intent HARD violations and a real closed-loop step. Not a constant."""
+    from minakanushi.strategy.candidate import StrategyCandidate
+
+    allowed, rejected, _ = kernel.filter(list(candidates), trajectories)
+    intent = policy.select(allowed, trajectories, goal_xy, now)
+    rejected_ids = {c.strategy_id for c in rejected}
+    violations = 1 if intent.strategy_id in rejected_ids else 0
+    selected = None
+    for item in allowed:
+        if item.strategy_id == intent.strategy_id:
+            selected = item.candidate
+            break
+    if selected is None:
+        selected = StrategyCandidate(intent.strategy_id, intent.objective, intent.target_state, 0.0, 0.0)
+    violations += count_hard_violations(selected, trajectories.get(intent.strategy_id, []), simulation)
+    success = closed_loop_success(simulation, intent, agent_xy, agent_vel, now)
+    return violations, success
+
+
 def assemble_bundle(
     *,
     pred_xy: Tensor,

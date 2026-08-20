@@ -14,10 +14,13 @@ from torch.nn.utils import clip_grad_norm_
 from minakanushi.architecture.config import MinakanushiConfig, load_config
 from minakanushi.architecture.mina_unit import MinaUnitBatch, pack_units
 from minakanushi.architecture.model import MinakanushiSystem
+from minakanushi.constraints.kernel import MinakanushiConstraintKernel
+from minakanushi.future.engine import group_by_strategy
+from minakanushi.policy.action_policy import ActionPolicy
 from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.checkpoint import save_mina
-from minakanushi.training.metrics import assemble_bundle
+from minakanushi.training.metrics import assemble_bundle, policy_firewall_metrics
 from minakanushi.training.objectives import compute_objectives
 from minakanushi.utils.seed import seed_everything
 from minakanushi.utils.tensors import assert_finite, resolve_device, resolve_dtype
@@ -59,6 +62,10 @@ class UnrollPacket:
     episode_index: int
     frame_index: int
     scenario: str
+    candidates: list
+    obs_timestamp: float
+    obs_agent_xy: tuple[float, float]
+    obs_agent_vel: tuple[float, float]
 
 
 def _align(pred_ids: Tensor, pred_occ: Tensor, true_ids: Tensor, true_xy: Tensor, true_vel: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -115,6 +122,8 @@ class Trainer:
             lr=config.training.learning_rate,
             weight_decay=config.training.weight_decay,
         )
+        self.constraints = MinakanushiConstraintKernel(config.simulation)
+        self.policy = ActionPolicy()
         self._last_forward_s = 0.0
         self._last_backward_s = 0.0
 
@@ -248,6 +257,10 @@ class Trainer:
             episode_index=ep_idx,
             frame_index=idx,
             scenario=episode.scenario,
+            candidates=[cand, alt],
+            obs_timestamp=float(obs.timestamp),
+            obs_agent_xy=tuple(float(x) for x in obs.agent_xy),
+            obs_agent_vel=tuple(float(x) for x in obs.agent_vel),
         )
 
     def _metrics(self, pkt: UnrollPacket) -> dict[str, float]:
@@ -279,6 +292,17 @@ class Trainer:
         const = torch.linalg.vector_norm(pkt.aligned_xy[0] - true_term, dim=-1)
         occ = pkt.aligned_occ[0].to(best.dtype)
         coverage = float(((best < const).to(best.dtype) * occ).sum() / occ.sum().clamp_min(1.0))
+        violations, loop_ok = policy_firewall_metrics(
+            self.constraints,
+            self.policy,
+            pkt.candidates,
+            group_by_strategy(pkt.trajs),
+            self.config.simulation,
+            self.config.simulation.home,
+            pkt.obs_timestamp,
+            pkt.obs_agent_xy,
+            pkt.obs_agent_vel,
+        )
         bundle = assemble_bundle(
             pred_xy=pred.entity_xy,
             true_xy=pkt.aligned_xy,
@@ -293,8 +317,8 @@ class Trainer:
             position_error=pred.entity_xy - pkt.aligned_xy,
             branch_xy=branch_xy,
             memory_delta=mem_delta,
-            constraint_violations=0,
-            closed_loop_success=1.0,
+            constraint_violations=violations,
+            closed_loop_success=loop_ok,
             coverage=coverage,
         )
         return asdict(bundle)

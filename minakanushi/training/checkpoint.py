@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import zipfile
 from dataclasses import asdict
 from pathlib import Path
@@ -20,6 +21,7 @@ MANIFEST_NAME = "manifest.yaml"
 WEIGHTS_NAME = "weights.pt"
 CONFIG_NAME = "architecture.yaml"
 CHECKPOINT_FORMAT_VERSION = 2
+_STEP_IN_NAME = re.compile(r"step(\d+)", re.IGNORECASE)
 
 
 def _require(manifest: dict, key: str, expected) -> None:
@@ -135,3 +137,20 @@ def load_mina(
             raise ValueError("checkpoint has no optimizer state; refusing silent resume")
         optimizer.load_state_dict(payload["optimizer"])
     return manifest
+
+
+def checkpoint_step(path: str | Path) -> int:
+    """Training step encoded in `*_step{N}.mina`. Missing step sorts as -1."""
+    match = _STEP_IN_NAME.search(Path(path).stem)
+    if match is None:
+        return -1
+    return int(match.group(1))
+
+
+def latest_mina(directory: str | Path) -> Path:
+    """Newest checkpoint by numeric step, not lexicographic filename order."""
+    directory = Path(directory)
+    files = list(directory.glob("*.mina"))
+    if not files:
+        raise FileNotFoundError(f"no .mina checkpoint in {directory}")
+    return max(files, key=checkpoint_step)

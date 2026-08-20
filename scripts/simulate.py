@@ -39,7 +39,6 @@ def simulate(root: Path, steps: int) -> dict:
         result = engine.step(obs, state)
         state = result.state
         world.step(result.action_intent)
-        after = world.observe().agent_xy
         tel = result.telemetry
         rec = {
             "cycle_id": tel.cycle_id,
@@ -70,9 +69,7 @@ def simulate(root: Path, steps: int) -> dict:
     wait = ActionIntent("wait", "WAIT", (1.0, 1.0), {}, 1.0, 1e9, (), "gate02.control")
     go = ActionIntent("move", "MOVE_TO", tuple(float(x) for x in config.simulation.targets[0]["xy"]), {}, 1.0, 1e9, (), "gate02.force")
     for _ in range(steps):
-        ctrl.observe()
         ctrl.step(wait)
-        moved.observe()
         moved.step(go)
     delta = float(((ctrl.agent.xy - moved.agent.xy) ** 2).sum() ** 0.5)
     live_delta = 0.0

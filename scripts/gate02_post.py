@@ -14,7 +14,7 @@ from minakanushi.future.engine import group_by_strategy
 from minakanushi.runtime.engine import MinakanushiEngine
 from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.baselines import constant_position, constant_velocity, no_memory_state, single_future
-from minakanushi.training.checkpoint import load_mina
+from minakanushi.training.checkpoint import latest_mina, load_mina
 from minakanushi.training.metrics import displacement_error, masked_mse
 from minakanushi.training.trainer import trainer_from_files
 from minakanushi.utils.seed import seed_everything
@@ -27,10 +27,7 @@ OUT = ROOT / "experiments" / "stage0_overfit"
 
 
 def _latest_mina() -> Path:
-    files = sorted(OUT.glob("*.mina"))
-    if not files:
-        raise FileNotFoundError("no .mina checkpoint in experiments/stage0_overfit")
-    return files[-1]
+    return latest_mina(OUT)
 
 
 def _fresh_system():
