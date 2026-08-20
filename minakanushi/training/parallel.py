@@ -6,11 +6,13 @@ Does not construct MinakanushiSystem. Wrap is for H200/B300 torchrun only.
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass
 from typing import Any
 
 import torch
 from torch import nn
+from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 
 from minakanushi.architecture.config import ArchitectureConfig, TrainingConfig
@@ -287,6 +289,41 @@ def _attach_replicated_grad_hook(parameter: nn.Parameter, world_size: int) -> No
         parameter.register_post_accumulate_grad_hook(_post_hook)
         return
     parameter.register_hook(_allreduce_grad)
+
+
+def _scalar_norm(value: torch.Tensor | float) -> float:
+    if not torch.is_tensor(value):
+        return float(value)
+    if is_fsdp_dtensor(value):
+        if hasattr(value, "full_tensor"):
+            value = value.full_tensor()
+        elif hasattr(value, "to_local"):
+            value = value.to_local()
+    return float(value.detach().float().cpu())
+
+
+def clip_grad_norm_mixed(parameters, max_norm: float, norm_type: float = 2.0) -> float:
+    """Clip dense and FSDP2 DTensor gradients without mixing dispatch types."""
+    dense: list[nn.Parameter] = []
+    dtensor: list[nn.Parameter] = []
+    for parameter in list(parameters):
+        if parameter.grad is None:
+            continue
+        target = dtensor if is_fsdp_dtensor(parameter) or is_fsdp_dtensor(parameter.grad) else dense
+        target.append(parameter)
+    norms: list[float] = []
+    for group in (dense, dtensor):
+        if not group:
+            continue
+        # foreach groups tensors by device and dispatch key. Dense Tensor and
+        # DTensor cannot share one foreach call, so each group is clipped alone.
+        norm = clip_grad_norm_(group, max_norm, norm_type=norm_type, foreach=False)
+        norms.append(_scalar_norm(norm))
+    if not norms:
+        return 0.0
+    if norm_type == float("inf"):
+        return max(norms)
+    return float(math.pow(sum(math.pow(value, norm_type) for value in norms), 1.0 / norm_type))
 
 
 def wrap_fsdp2(module: nn.Module, activation_checkpoint: bool | None = None) -> nn.Module:

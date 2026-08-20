@@ -11,6 +11,7 @@ from torch import nn
 
 from minakanushi.architecture.config import load_architecture, load_training
 from minakanushi.training.parallel import (
+    clip_grad_norm_mixed,
     collect_full_checkpoint,
     init_process_group_if_needed,
     is_fsdp_dtensor,
@@ -203,6 +204,30 @@ def test_replicated_grad_sync_allreduces_leftover_params(monkeypatch) -> None:
         if item.shape == averaged.shape and torch.allclose(averaged * 2, item)
     ]
     assert matches
+
+
+def test_clip_grad_norm_mixed_splits_dense_and_dtensor(monkeypatch) -> None:
+    import minakanushi.training.parallel as parallel
+
+    dense = nn.Parameter(torch.ones(2))
+    shard = nn.Parameter(torch.ones(3))
+    dense.grad = torch.ones_like(dense)
+    shard.grad = torch.ones_like(shard)
+    calls: list[list[int]] = []
+
+    def fake_is_dtensor(value) -> bool:
+        return value is shard or value is shard.grad
+
+    def fake_clip(group, max_norm, norm_type=2.0, foreach=None):
+        calls.append([id(parameter) for parameter in group])
+        assert foreach is False
+        return torch.tensor(float(len(group)))
+
+    monkeypatch.setattr(parallel, "is_fsdp_dtensor", fake_is_dtensor)
+    monkeypatch.setattr(parallel, "clip_grad_norm_", fake_clip)
+    norm = clip_grad_norm_mixed([dense, shard], 1.0)
+    assert norm == pytest.approx(2**0.5)
+    assert calls == [[id(dense)], [id(shard)]]
 
 
 def test_replicated_params_skip_dtensor_name(monkeypatch) -> None:

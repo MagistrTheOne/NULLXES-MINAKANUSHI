@@ -10,7 +10,6 @@ from time import perf_counter
 
 import torch
 from torch import Tensor
-from torch.nn.utils import clip_grad_norm_
 
 from minakanushi.architecture.config import MinakanushiConfig, load_config
 from minakanushi.architecture.freeze import assert_may_construct, is_6_8b_profile
@@ -24,7 +23,7 @@ from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.checkpoint import save_mina
 from minakanushi.training.metrics import assemble_bundle, memory_effect_delta, policy_firewall_metrics
 from minakanushi.training.objectives import compute_objectives
-from minakanushi.training.parallel import collect_full_checkpoint, dist_barrier, is_rank0, training_device
+from minakanushi.training.parallel import clip_grad_norm_mixed, collect_full_checkpoint, dist_barrier, is_rank0, training_device
 from minakanushi.utils.seed import seed_everything
 from minakanushi.utils.tensors import assert_finite, resolve_dtype
 from minakanushi.training.revision import evidence_for_slots, should_revise_mask
@@ -427,7 +426,7 @@ class Trainer:
         t1 = perf_counter()
         self.opt.zero_grad(set_to_none=True)
         pkt.breakdown.total.backward()
-        grad_norm = float(clip_grad_norm_(self.system.parameters(), self.config.training.grad_clip))
+        grad_norm = clip_grad_norm_mixed(self.system.parameters(), self.config.training.grad_clip)
         self.opt.step()
         self._last_backward_s = perf_counter() - t1
         traj_error = float(
