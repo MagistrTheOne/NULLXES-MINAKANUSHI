@@ -3,24 +3,26 @@
 **Target profile:** `minakanushi_6_8b` (6.8B). Spec: `docs/MINA_6_8B_TRAINING.md`.  
 **Do not** `MinakanushiSystem` from `minakanushi_6_8b.yaml` on the 6000 BW pod.
 
-## Next cash — Gate 03 Revision Validation
+## Next cash — Gate 03B hidden direction
 
-Tag: `MINAKANUSHI-revision-gate` (`0ea5062`). Profile: `gpu_train_v01` only.
-Wall clock 30–60 min. Validate first. Train only if revision metrics move.
-`λ_revision = 1.0`. Do not retune λ. Success is not `loss ↓`.
+Parent exam: Gate 03 on `main` (`3d8012e`). Profile: `gpu_train_v01` only.
+Wall clock 30–60 min. **Eval diagnostic, not a full train.** `λ_revision = 1.0`.
+Do not retune λ. Do not scale. Question: does hidden direction stay 0.5
+across N episodes, or was that `cpu_dev` / one seed?
 
 ```text
 git clone <repo>
 python -m pip install -e ".[test]"
 python -m pytest tests -q
-python scripts/gate03_revision_validate.py \
+python scripts/gate03b_hidden_direction.py \
   --training configs/training/stage_a_gpu_train_v01.yaml \
-  --out experiments/gate03_revision
+  --n 1000 \
+  --out experiments/gate03b
 ```
 
-Fill After column in `docs/GATE_03_REVISION_VALIDATION.md`. STOP POD.
+Fill `docs/GATE_03B_HIDDEN_DIRECTION_REPORT.md` from the JSON. STOP POD.
 
-Closed: 6.8B, H200, humanoid, Yunmu, large datasets.
+Closed: 6.8B, H200, humanoid, Yunmu, architecture edit, λ change.
 
 ## Stage A (done)
 

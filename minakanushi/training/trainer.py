@@ -166,11 +166,11 @@ class Trainer:
         _, core = self.system.observe_to_core(packed, constructed, hints)
         return pos, hints, constructed, core
 
-    def unroll(self, step: int) -> UnrollPacket:
+    def unroll(self, step: int, *, scenario: str | None = None, episode_index: int | None = None) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
-        ep_idx = (step - 1) % max(train.n_overfit_episodes, 1)
-        scenario_name = TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
+        ep_idx = int(episode_index) if episode_index is not None else (step - 1) % max(train.n_overfit_episodes, 1)
+        scenario_name = scenario or TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
         episode = generate_episode(
             self.config.simulation,
             seed=train.seed,

@@ -176,14 +176,16 @@ gate03_pass:
 
 ## Next
 
+The 0.5 on `hidden_correction` is Gate **03B**, not a new architecture
+gate. Protocol: `docs/GATE_03B_HIDDEN_DIRECTION.md`.
+
 ```text
-Blackwell
+Blackwell Gate 03B  (hidden × N, not one seed)
   ↓
-Gate 03 validation
+hidden direction rises  →  close Gate 03
+hidden stuck at ~0.5    →  term ratios, then causal correction later
   ↓
-revision metrics
+Gate 08 consolidation
   ↓
-if alive: Gate 03/08 consolidation
-  ↓
-only then scaling
+only then 6.8B
 ```

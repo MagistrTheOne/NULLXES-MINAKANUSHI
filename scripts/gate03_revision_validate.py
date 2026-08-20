@@ -46,10 +46,10 @@ def _not_average(after: torch.Tensor, before: torch.Tensor, evidence: torch.Tens
     return float(hits.sum().item() / int(mask.sum().item()))
 
 
-def evaluate_scenario(trainer, name: str) -> dict:
-    step = _scenario_step(name)
+def evaluate_scenario(trainer, name: str, *, episode_index: int | None = None) -> dict:
+    ep_idx = TRAIN_CURRICULUM.index(name) if episode_index is None else int(episode_index)
     with torch.no_grad():
-        pkt = trainer.unroll(step)
+        pkt = trainer.unroll(1, scenario=name, episode_index=ep_idx)
     metrics = trainer._metrics(pkt)
     pred = pkt.pred
     mask = pkt.should_revise
@@ -85,6 +85,7 @@ def evaluate_scenario(trainer, name: str) -> dict:
         "false_revision_rate": metrics["false_revision_rate"],
         "belief_revision_accuracy": metrics["belief_revision_accuracy"],
         "should_revise": int(pkt.should_revise.sum().item()),
+        "terms": {k: float(v.detach().item()) for k, v in pkt.breakdown.terms.items()},
     }
 
 
