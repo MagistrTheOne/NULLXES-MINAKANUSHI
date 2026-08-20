@@ -70,6 +70,7 @@ def test_dwc_checkpoint_passes_amp_recompute_context() -> None:
     assert "def cognitive_blocks" in dwc
     assert "FSDP2 activation_checkpoint is disabled" in parallel
     assert "activation_checkpoint=bool(train.activation_checkpoint)" in trainer
+    assert "foreach=False" in trainer
     assert "or is_6_8b_profile(config.architecture)" not in trainer
 
 

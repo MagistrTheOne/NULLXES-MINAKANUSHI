@@ -159,6 +159,7 @@ class Trainer:
             self.system.parameters(),
             lr=config.training.learning_rate,
             weight_decay=config.training.weight_decay,
+            foreach=False,
         )
         self.constraints = MinakanushiConstraintKernel(config.simulation)
         self.policy = ActionPolicy()
