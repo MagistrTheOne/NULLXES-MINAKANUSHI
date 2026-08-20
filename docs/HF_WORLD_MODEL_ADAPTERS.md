@@ -20,4 +20,4 @@ Fallback timeseries: [yixuan1999/interactive-world-sim-mujoco-data](https://hugg
 
 ## Rejected this cycle
 
-NVIDIA PhysicalAI WorldModel *Scenes (video / Cosmos). LeRobot RGB Open-X mirrors. Pixels-in / tokens-in is Gate 9+ perception, not Status Core v0.2.
+NVIDIA PhysicalAI WorldModel *Scenes (video / Cosmos). LeRobot RGB Open-X mirrors. Pixels-in / tokens-in is Gate 9+ perception, not Status Core v0.2. Cosmos remains an idea-direction for `docs/experiments/MINA_V2_MULTIMODAL.md` (state prediction / MinaUnits / ActionIntent), not a train source and not a weight.

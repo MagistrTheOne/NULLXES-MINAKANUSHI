@@ -1,0 +1,42 @@
+# Runnable organ profile. Not minakanushi_6_8b. Do not train 6.8B from this file.
+
+identity:
+  architecture: MINAKANUSHI
+  organization: NULLXES
+  system_class: adaptive_situational_intelligence
+  architecture_generation: 2
+  native_runtime: nullxes
+  architecture_version: "0.2-mm-experiment"
+
+profile_name: mina_v2_mm_cpu
+latent_dim: 64
+state_dim: 64
+memory_dim: 64
+world_slots: 16
+memory_slots: 32
+core_depth: 2
+uncertainty_channels: 8
+dropout: 0.0
+
+npf:
+  num_frequencies: 16
+  max_sources: 32
+  time_scale_seconds: 1.0
+
+cognition:
+  budget: 2
+  convergence_threshold: 0.05
+
+persistence:
+  steps: 6
+  retirement_uncertainty: 0.95
+
+prediction_horizons:
+  immediate: 1
+  short: 3
+  medium: 6
+
+dt: 0.1
+max_sources: 32
+max_observations: 24
+future_branches: 3

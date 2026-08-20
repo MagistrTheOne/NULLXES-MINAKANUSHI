@@ -1,0 +1,14 @@
+architecture: MINAKANUSHI
+short_name: MINA
+architecture_id: nullxes.minakanushi
+organization: NULLXES
+system_class: adaptive_situational_intelligence
+native_runtime: nullxes
+product: Multimodal Cognitive Layer
+architecture_generation: 2
+trainable: false
+identity_loss: false
+pwm: false
+language_is_cognition: false
+authority_is_gate: true
+notes: Experiment pack identity. Not a 6.8B checkpoint stamp. See docs/experiments/MINA_V2_MULTIMODAL.md

@@ -98,6 +98,13 @@ Checkpoints are native `*.mina` zip archives (YAML manifest + tensors).
 
 Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 
+## Experiments (not the foundation)
+
+Direction after Yunmu / Gate 9+. Does not change the frozen 6.8B loop, dims, or v0.2 trainer.
+
+- `docs/experiments/MINA_V2_MULTIMODAL.md` — MINA V2 Multimodal Cognitive Layer (organs → MinaUnit → belief; not a VLA, not Cosmos generation)
+- `models/MINA-V2-MM/` — experiment pack (cfg, identity, `mina_v2` organs on cpu_dev scale; not 6.8B)
+
 ## Docs
 
 - `docs/ARCHITECTURE.md`

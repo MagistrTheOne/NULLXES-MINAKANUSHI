@@ -1,0 +1,68 @@
+identity:
+  architecture: MINAKANUSHI
+  organization: NULLXES
+  system_class: adaptive_situational_intelligence
+  architecture_generation: 2
+  native_runtime: nullxes
+  architecture_version: "0.2-mm-experiment"
+
+profile_name: mina_v2_mm
+short_name: MINA
+product: Multimodal Cognitive Layer
+cognition_profile: minakanushi_6_8b
+cognition_frozen_at: "7aba976"
+runtime_profile: configs/organs_cpu.yaml
+
+# Organs emit MinaUnits. They are not a fused token encoder and not a VLA.
+organs:
+  vision:
+    source_type: image
+    input: structured_detections
+  audio:
+    source_type: structured_event
+    metadata_channel: audio
+  language:
+    source_type: text
+    emits: operator_intent_slots
+    calls_action_policy: false
+  sensor:
+    source_type: system_state
+    pwm: false
+
+future_v2:
+  kind: SceneBranch
+  not: video_generation
+  fields: [entities, relations, risk, uncertainty, suggested_hold]
+
+# Runnable tensor sizes for this pack (not the frozen 6.8B profile).
+latent_dim: 64
+state_dim: 64
+memory_dim: 64
+world_slots: 16
+memory_slots: 32
+core_depth: 2
+uncertainty_channels: 8
+dropout: 0.0
+
+npf:
+  num_frequencies: 16
+  max_sources: 32
+  time_scale_seconds: 1.0
+
+cognition:
+  budget: 2
+  convergence_threshold: 0.05
+
+persistence:
+  steps: 6
+  retirement_uncertainty: 0.95
+
+prediction_horizons:
+  immediate: 1
+  short: 3
+  medium: 6
+
+dt: 0.1
+max_sources: 32
+max_observations: 24
+future_branches: 3

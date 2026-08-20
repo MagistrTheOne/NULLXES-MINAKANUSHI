@@ -21,9 +21,10 @@ dependencies = [
 test = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]
-include = ["minakanushi*", "simulations*"]
+where = [".", "models/MINA-V2-MM/src"]
+include = ["minakanushi*", "simulations*", "mina_v2*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "tests"]
+pythonpath = [".", "tests", "models/MINA-V2-MM/src"]
 addopts = "-q"
