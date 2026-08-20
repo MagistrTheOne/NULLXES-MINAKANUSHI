@@ -1,0 +1,10 @@
+# Identity Initialization — not a training config.
+# Does not construct 6.8B. Used as documentation for scripts/identity_init.py.
+
+name: mina_6_8b_identity_initialization
+trainable: false
+identity_loss: false
+authority_neural_objective: false
+architecture: configs/architecture/minakanushi_6_8b.yaml
+input_checkpoint: experiments/mina_6_8b_status_core_researched/minakanushi_stage0_step64.mina
+output: experiments/mina_6_8b_identity/MINA-6.8B-IdentityBound.mina

@@ -124,5 +124,10 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/GATE_09_RUNTIME.md` — Autonomous Runtime (`cycle()`, RuntimeState)
 - `docs/DATASET_V1.md` — SyntheticWorld dataset contract
 - `docs/MINA_6_8B_TRAINING.md` — 6.8B contract (Yunmu / Warmcore)
+- `docs/MINA_TRAINING_V02.md` — Status Core v0.2 freeze, identity init, JSON, resume
+- `docs/DATASET_PIPELINE.md` — JsonEpisodeDataset
+- `docs/RESUME_TRAINING.md` — same-model resume
+- `docs/HF_WORLD_MODEL_ADAPTERS.md` — Hub adapters, not train source
+- `docs/GATE_V02_ACCEPTANCE.md` — v0.2 gate before Yunmu (cpu_dev)
 - `docs/RUNPOD.md` — RTX 6000 BW Stage A (`gpu_train_v01` instrument)
 - `docs/PRETRAINING_GATE_01.md`

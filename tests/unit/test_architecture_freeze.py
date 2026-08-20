@@ -13,6 +13,7 @@ from minakanushi.architecture.freeze import (
     FROZEN_CORE_DEPTH,
     FROZEN_LATENT_DIM,
     FROZEN_PARAM_ESTIMATE,
+    V02_FORBIDDEN,
     assert_6_8b_frozen,
     assert_may_construct,
     is_6_8b_profile,
@@ -83,6 +84,19 @@ def test_status_core_yaml_is_fsdp2_bf16_final_checkpoint() -> None:
     assert plan.precision == "bf16"
     assert plan.activation_checkpoint is False
     assert train.checkpoint_every == train.steps
+
+
+def test_v02_yaml_keeps_frozen_6_8b_dims() -> None:
+    arch = load_architecture(ROOT / "configs" / "architecture" / "minakanushi_6_8b.yaml")
+    train = load_training(ROOT / "configs" / "training" / "mina_6_8b_v02.yaml")
+    plan = plan_from_training(arch, train)
+    assert_6_8b_frozen(arch)
+    assert "identity_loss" in V02_FORBIDDEN
+    assert plan.parallelism == "fsdp2_zero3"
+    assert plan.precision == "bf16"
+    assert plan.activation_checkpoint is False
+    assert train.checkpoint_every == train.steps
+    assert train.dataset_root.replace("\\", "/").endswith("dataset/mina_6_8b")
 
 
 def test_fp16_is_forbidden_for_6_8b() -> None:

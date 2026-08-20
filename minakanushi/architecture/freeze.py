@@ -17,6 +17,22 @@ FROZEN_PARAM_ESTIMATE = 6_799_130_646
 
 ALLOWED_6_8B_GPU = ("H200", "B200", "B300")
 
+V02_CYCLE = "pipeline_and_data_only"
+V02_FORBIDDEN = (
+    "changing latent_dim",
+    "changing core_depth",
+    "changing world_slots",
+    "changing memory_slots",
+    "adding layers",
+    "removing layers",
+    "replacing DWC",
+    "adding attention modules",
+    "adding MoE",
+    "adding language head",
+    "identity_loss",
+    "training authority as a neural objective",
+)
+
 
 def is_6_8b_profile(config: ArchitectureConfig) -> bool:
     return (

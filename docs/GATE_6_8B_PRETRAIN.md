@@ -2,7 +2,8 @@
 
 **Status:** executable. Architecture frozen at `7aba976`.
 **Profile:** `minakanushi_6_8b` / `models/MINA-6.8B`
-**Contract:** `docs/MINA_6_8B_TRAINING.md`
+**Contract:** `docs/MINA_6_8B_TRAINING.md`  
+**v0.2 pipeline:** `docs/MINA_TRAINING_V02.md` (architecture freeze, identity init, JSON resume).
 
 This is not a month of training. This is not Yunmu. This is not a new module.
 

@@ -17,6 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="NULLXES MINAKANUSHI trainer")
     parser.add_argument("--config", default="configs/training/stage0_validation.yaml")
     parser.add_argument("--out", default="experiments/stage0")
+    parser.add_argument("--resume", default=None, help="*.mina to continue (optimizer, RNG, cursor, identity)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     training = load_training(root / args.config)
@@ -27,7 +28,8 @@ def main() -> None:
         gpu_name = torch.cuda.get_device_name(torch.cuda.current_device())
     assert_may_construct(arch, device=training.device, gpu_name=gpu_name)
     trainer = trainer_from_files(root, root / args.config)
-    trainer.fit(root / args.out)
+    resume = Path(args.resume) if args.resume else None
+    trainer.fit(root / args.out, resume=resume)
 
 
 if __name__ == "__main__":

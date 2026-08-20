@@ -12,7 +12,12 @@ from simulations.synthetic_world.curriculum_6_8b import PHASE_ORDER, write_curri
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate MINA 6.8B episode curriculum")
     parser.add_argument("--root", type=Path, default=Path("dataset/mina_6_8b"))
-    parser.add_argument("--n", type=int, default=2)
+    parser.add_argument(
+        "--n",
+        type=int,
+        default=2,
+        help="episodes per phase. Production pack: --n 250 (1000 total). JSON stays off git.",
+    )
     parser.add_argument("--length", type=int, default=12)
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()

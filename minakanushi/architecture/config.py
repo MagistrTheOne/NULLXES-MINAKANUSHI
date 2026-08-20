@@ -151,6 +151,7 @@ class TrainingConfig:
     regularizer: RegularizerConfig = field(default_factory=RegularizerConfig)
     n_overfit_episodes: int = 16
     dataset_name: str = "stage0_synthetic"
+    dataset_root: str = ""
 
 
 @dataclass(frozen=True)
@@ -279,6 +280,7 @@ def load_training(path: str | Path) -> TrainingConfig:
         regularizer=RegularizerConfig(**regularizer) if regularizer else RegularizerConfig(),
         n_overfit_episodes=int(raw.get("n_overfit_episodes", 16)),
         dataset_name=str(raw.get("dataset_name", "stage0_synthetic")),
+        dataset_root=str(raw.get("dataset_root", "")),
     )
 
 

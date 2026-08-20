@@ -5,16 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import json
+
 from minakanushi.architecture.config import SimulationConfig
 from simulations.synthetic_world.dataset import generate_episode
 from simulations.synthetic_world.dataset_v1 import episode_to_record
 from simulations.synthetic_world.replay import canonical_json
 
 PHASES: dict[str, tuple[str, ...]] = {
-    "physics": ("const_velocity", "accelerate", "turn", "occlusion", "delayed", "obstacles"),
-    "agency": ("const_velocity", "agent_move"),
-    "causality": ("hidden_correction", "conflict", "reacquisition", "agent_move"),
-    "embodiment": ("const_velocity", "agent_move"),
+    "physics": ("const_velocity", "accelerate", "brake", "turn", "occlusion", "delayed", "obstacles"),
+    "agency": ("const_velocity", "agent_move", "goal_change", "unexpected_stop"),
+    "causality": ("hidden_correction", "conflict", "reacquisition", "gone_forever"),
+    "embodiment": ("delayed", "motor_delay", "agent_move"),
 }
 
 PHASE_ORDER: tuple[str, ...] = ("physics", "agency", "causality", "embodiment")
@@ -112,6 +114,18 @@ def write_phase(
     return paths
 
 
+def write_index(root: Path, written: dict[str, list[Path]]) -> Path:
+    root = Path(root)
+    lines = []
+    for phase in PHASE_ORDER:
+        for path in written[phase]:
+            rel = path.relative_to(root).as_posix()
+            lines.append(json.dumps({"path": rel, "phase": phase, "episode_id": path.stem}, sort_keys=True))
+    index = root / "index.jsonl"
+    index.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return index
+
+
 def write_curriculum(
     root: Path,
     config: SimulationConfig,
@@ -121,7 +135,9 @@ def write_curriculum(
     length: int = 12,
 ) -> dict[str, list[Path]]:
     root.mkdir(parents=True, exist_ok=True)
-    return {
+    written = {
         phase: write_phase(root, phase, config, seed=seed, n_episodes=n_episodes, length=length)
         for phase in PHASE_ORDER
     }
+    write_index(root, written)
+    return written

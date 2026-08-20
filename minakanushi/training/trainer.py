@@ -21,12 +21,21 @@ from minakanushi.policy.action_policy import ActionPolicy
 from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.training.checkpoint import save_mina
-from minakanushi.training.metrics import assemble_bundle, memory_effect_delta, policy_firewall_metrics
+from minakanushi.training.episode_dataset import JsonEpisodeDataset
+from minakanushi.training.metrics import (
+    assemble_bundle,
+    counterfactual_separation_score,
+    masked_mse,
+    memory_effect_delta,
+    policy_firewall_metrics,
+)
 from minakanushi.training.objectives import compute_objectives
 from minakanushi.training.parallel import clip_grad_norm_mixed, collect_full_checkpoint, dist_barrier, is_rank0, training_device
-from minakanushi.utils.seed import seed_everything
+from minakanushi.training.resume import WarmupScheduler, apply_resume
+from minakanushi.utils.seed import capture_rng, seed_everything
 from minakanushi.utils.tensors import assert_finite, resolve_dtype
 from minakanushi.training.revision import evidence_for_slots, should_revise_mask
+from minakanushi.identity.initialize import canonical_identity_payload
 from simulations.synthetic_world.dataset import TRAIN_CURRICULUM, generate_episode, training_frame
 
 
@@ -165,6 +174,37 @@ class Trainer:
         self.policy = ActionPolicy()
         self._last_forward_s = 0.0
         self._last_backward_s = 0.0
+        self.scheduler = WarmupScheduler(self.opt, train.warmup_steps, train.learning_rate)
+        self.start_step = 1
+        self.dataset = None
+        if str(train.dataset_root).strip():
+            data_root = Path(train.dataset_root)
+            if not data_root.is_absolute():
+                data_root = self.root / data_root
+            self.dataset = JsonEpisodeDataset(data_root, seed=train.seed)
+        self._resume_extras: dict = {}
+
+    def resume_from(self, path: Path) -> None:
+        state = apply_resume(path, self.system, self.opt, self.scheduler)
+        self.start_step = int(state.last_step) + 1
+        self._resume_extras = dict(state.extras)
+
+    def _load_episode(self, step: int, *, scenario: str | None, episode_index: int | None):
+        train = self.config.training
+        arch = self.config.architecture
+        if self.dataset is not None:
+            idx = int(episode_index) if episode_index is not None else (step - 1) % len(self.dataset)
+            return self.dataset.episode(idx)
+        ep_idx = int(episode_index) if episode_index is not None else (step - 1) % max(train.n_overfit_episodes, 1)
+        scenario_name = scenario or TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
+        return generate_episode(
+            self.config.simulation,
+            seed=train.seed,
+            episode_index=ep_idx,
+            length=train.sequence_length,
+            horizon=arch.prediction_horizons.short,
+            scenario=scenario_name,
+        )
 
     def _amp(self):
         if self._amp_enabled:
@@ -196,16 +236,8 @@ class Trainer:
     def unroll(self, step: int, *, scenario: str | None = None, episode_index: int | None = None) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
-        ep_idx = int(episode_index) if episode_index is not None else (step - 1) % max(train.n_overfit_episodes, 1)
-        scenario_name = scenario or TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
-        episode = generate_episode(
-            self.config.simulation,
-            seed=train.seed,
-            episode_index=ep_idx,
-            length=train.sequence_length,
-            horizon=arch.prediction_horizons.short,
-            scenario=scenario_name,
-        )
+        episode = self._load_episode(step, scenario=scenario, episode_index=episode_index)
+        ep_idx = int(episode.episode_index)
         idx = training_frame(episode.scenario, len(episode.observations))
         obs = episode.observations[idx]
         obs_n = episode.observations[idx + 1]
@@ -374,6 +406,10 @@ class Trainer:
                 mem_slots,
             ).detach()
         )
+        err_with = masked_mse(pkt.pred_n.entity_xy, pkt.aligned_next, pkt.aligned_occ)
+        err_without = masked_mse(core_off.world_state.entity_xy, pkt.aligned_next, pkt.aligned_occ)
+        memory_future = float((err_without - err_with).detach())
+        future_div = float(counterfactual_separation_score(pkt.pred_future[0, -1], pkt.alt_future[0, -1]).detach())
         primary = [t for t in pkt.trajs if t.strategy_id == pkt.trajs[0].strategy_id]
         branch_xy = torch.stack([t.states_xy for t in primary], dim=0)
         true_term = pkt.true_future[0, -1]
@@ -416,6 +452,9 @@ class Trainer:
             has_evidence=pkt.has_evidence,
             occupied_before=pkt.occupied_before,
             entity_id=pred.entity_id,
+            memory_future_delta=memory_future,
+            future_diversity=future_div,
+            counterfactual_quality=future_div,
         )
         return asdict(bundle)
 
@@ -429,6 +468,7 @@ class Trainer:
         pkt.breakdown.total.backward()
         grad_norm = clip_grad_norm_mixed(self.system.parameters(), self.config.training.grad_clip)
         self.opt.step()
+        self.scheduler.step()
         self._last_backward_s = perf_counter() - t1
         traj_error = float(
             ((pkt.pred_future[:, -1] - pkt.true_future[:, -1]).pow(2) * pkt.aligned_occ.unsqueeze(-1)).sum().item()
@@ -445,16 +485,20 @@ class Trainer:
             metrics=metrics,
         )
 
-    def fit(self, out_dir: Path) -> list[TrainLog]:
+    def fit(self, out_dir: Path, *, resume: Path | None = None) -> list[TrainLog]:
         train = self.config.training
+        if resume is not None:
+            self.resume_from(Path(resume))
         logs: list[TrainLog] = []
         out_dir.mkdir(parents=True, exist_ok=True)
         metrics_path = out_dir / "metrics.jsonl"
         abort_reason = None
-        for step in range(1, train.steps + 1):
+        start = int(self.start_step)
+        end = start + int(train.steps) - 1
+        for step in range(start, end + 1):
             log = self.step_once(step)
             logs.append(log)
-            if step % train.log_every == 0 or step == 1:
+            if step % train.log_every == 0 or step == start:
                 if is_rank0():
                     print(
                         f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} "
@@ -471,7 +515,7 @@ class Trainer:
                 if is_rank0():
                     print(f"ABORT {abort_reason}", flush=True)
                 break
-            if step % train.checkpoint_every == 0 or step == train.steps:
+            if step % train.checkpoint_every == 0 or step == end:
                 gathered = collect_full_checkpoint(self.system, self.opt)
                 save_mina(
                     out_dir / f"minakanushi_stage{train.stage}_step{step}.mina",
@@ -485,10 +529,16 @@ class Trainer:
                         "seed": train.seed,
                         "dataset_name": train.dataset_name,
                         "dataset_cursor": step,
+                        "dataset_root": train.dataset_root,
+                        "identity_initialized": True,
+                        "identity_trainable": False,
+                        "identity": canonical_identity_payload()["identity_state"],
+                        "scheduler": self.scheduler.state_dict(),
                         "loss": log.loss,
                         "traj_error": log.traj_error,
                         "metrics": {"traj_error": log.traj_error, "loss": log.loss},
                     },
+                    tensors={"rng": capture_rng(), "scheduler": self.scheduler.state_dict()},
                 )
         last = logs[-1]
         if is_rank0():

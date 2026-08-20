@@ -31,6 +31,10 @@ class MetricBundle:
     revision_magnitude_error: float = 0.0
     revision_latency: float = -1.0
     false_revision_rate: float = 0.0
+    revision_accuracy: float = 0.0
+    memory_future_delta: float = 0.0
+    future_diversity: float = 0.0
+    counterfactual_quality: float = 0.0
 
 
 def masked_mse(pred: Tensor, true: Tensor, mask: Tensor) -> Tensor:
@@ -208,6 +212,9 @@ def assemble_bundle(
     has_evidence: Tensor | None = None,
     occupied_before: Tensor | None = None,
     entity_id: Tensor | None = None,
+    memory_future_delta: float = 0.0,
+    future_diversity: float = 0.0,
+    counterfactual_quality: float = 0.0,
 ) -> MetricBundle:
     pos = masked_mse(pred_xy, true_xy, occupied)
     vel = masked_mse(pred_vel, true_vel, occupied)
@@ -264,5 +271,9 @@ def assemble_bundle(
         revision_magnitude_error=float(rev["revision_magnitude_error"]),
         revision_latency=float(rev["revision_latency"]),
         false_revision_rate=float(rev["false_revision_rate"]),
+        revision_accuracy=float(rev["belief_revision_accuracy"]),
+        memory_future_delta=float(memory_future_delta),
+        future_diversity=float(future_diversity),
+        counterfactual_quality=float(counterfactual_quality),
     )
 

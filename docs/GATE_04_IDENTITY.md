@@ -14,3 +14,7 @@ SelfModel is a passport (dataclass). Persona is presentation
 (feminine-presenting interaction property, not `gender=female` as cognition).
 Authority modes: AUTONOMOUS, ADVISORY, DIRECTED, MANUAL, SAFE_HOLD.
 `policy_enabled=false` disables ActionPolicy selection only.
+
+v0.2 Identity Initialization stamps this passport into `*.mina`. It is not
+`identity_loss` and not a train run. Authority is a gate after ActionIntent.
+See `docs/MINA_TRAINING_V02.md`.

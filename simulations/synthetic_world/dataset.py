@@ -150,6 +150,9 @@ def generate_episode(
     if physics == "accelerate":
         world.movers[0].accel = np.array([0.4, 0.0], dtype=np.float64)
         world.movers[0].vel = world.movers[0].vel * 0.2
+    if physics == "brake":
+        world.movers[0].accel = np.array([-0.5, 0.0], dtype=np.float64)
+        world.movers[0].vel = np.array([0.9, 0.0], dtype=np.float64)
     if physics == "turn":
         world.movers[0].vel = np.array([0.6, 0.0])
     if physics == "hidden_correction":
@@ -165,12 +168,17 @@ def generate_episode(
     frames_obs: list[Observation] = []
     frames_gt: list[FrameTruth] = []
     delay = 0.15 if name == "delayed" else 0.0
+    if name == "motor_delay":
+        delay = 0.30
 
     for t in range(length):
         if physics == "accelerate":
             pass
         if physics == "turn" and t == length // 2:
             world.movers[0].vel = np.array([0.0, 0.7])
+        if physics == "unexpected_stop" and t == length // 2:
+            world.movers[0].vel = np.zeros(2)
+            world.movers[0].accel = None
         if physics == "hidden_correction":
             if 1 <= t <= 5:
                 world.hidden_ids.add(world.movers[0].body_id)
@@ -189,7 +197,12 @@ def generate_episode(
         if physics == "gone_forever" and t >= 3:
             world.removed_ids.add(world.movers[0].body_id)
             world.hidden_ids.add(world.movers[0].body_id)
-        if name == "agent_move":
+        if name == "motor_delay" and t < 2:
+            intent = _intent("WAIT", (float(world.agent.xy[0]), float(world.agent.xy[1])))
+        elif name == "goal_change":
+            tgt = world.targets[0] if t < length // 2 else world.targets[min(1, len(world.targets) - 1)]
+            intent = _intent("MOVE_TO", (float(tgt.xy[0]), float(tgt.xy[1])))
+        elif name in {"agent_move", "motor_delay"}:
             intent = _intent("MOVE_TO", (float(world.targets[0].xy[0]), float(world.targets[0].xy[1])))
         else:
             intent = _intent("WAIT", (float(world.agent.xy[0]), float(world.agent.xy[1])))

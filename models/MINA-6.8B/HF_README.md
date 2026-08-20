@@ -169,8 +169,8 @@ Do **not** replace MINAKANUSHI with another foundation model. Scale this runtime
 
 ### Immediate (next H200 / B300 budget)
 
-- [ ] Wire `JsonEpisodeDataset` so `Trainer.unroll()` consumes `dataset/mina_6_8b` JSON, not only procedural `generate_episode(...)`.
-- [ ] Add `scripts/train.py --resume path/to/*.mina` (optimizer + runtime cursor + epoch index).
+- [x] Wire `JsonEpisodeDataset` so `Trainer.unroll()` consumes `dataset/mina_6_8b` JSON, not only procedural `generate_episode(...)`.
+- [x] Add `scripts/train.py --resume path/to/*.mina` (optimizer + runtime cursor + epoch index).
 - [ ] Expand curriculum past n=8 / 2-per-phase. Current Grok pack is valid but thin (8 episodes, 2 corrections, no constant-velocity collapse).
 - [ ] Re-enable activation checkpointing only after FSDP2 recompute metadata is proven; Status Core ran with `activation_checkpoint: false`.
 - [ ] Keep `checkpoint_every == steps` or uncompressed `ZIP_STORED` — deflate stalls 6.8B saves.
