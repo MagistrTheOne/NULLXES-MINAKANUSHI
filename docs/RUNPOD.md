@@ -1,42 +1,37 @@
-# RunPod — RTX PRO 6000 Blackwell first
+# RunPod — stack instrument first, 6.8B later
 
-Foundation tag exists: `MINAKANUSHI-v0.1-foundation`.
+**Target profile:** `minakanushi_6_8b` (6.8B). Spec: `docs/MINA_6_8B_TRAINING.md`.  
+**This cash (~$30):** 1× RTX PRO 6000 BW, **`gpu_train_v01` 6.2M only**.
 
-Current cash: **~$30**. That is Stage A only. November (100–200k RUB) is
-Stage B / `research_v01`. See `docs/TRAINING_PLAN.md`.
+Do not `MinakanushiSystem` from `minakanushi_6_8b.yaml` on this pod.
 
-## Order
+## Today
 
 ```text
 Stage A   RTX PRO 6000 BW    gpu_train_v01 6.2M     2–3 h
-          → fill docs/GPU_BRINGUP_6000BW.md
-          → STOP POD
-
-Decision  PASS + scaling signs  → Stage B later
-          FAIL                  → no medium, no H200
-
-Stage B   6000 BW             MINA-medium 100–300M   November
-Stage C   H100 / H200         research_v01 1.3B      November
+          CUDA / bf16 / AMP / dataloader / *.mina
+          fill docs/GPU_BRINGUP_6000BW.md
+          STOP POD
 ```
 
-Community Cloud ~$1.69/h (check live). $30 ≈ 14–17 h. Cap the pod.
-
-## Stage A commands (pod)
+Community Cloud ~$1.69/h. Cap the pod.
 
 ```text
 git clone --branch MINAKANUSHI-v0.1-foundation <repo>
 python -m pip install -e ".[test]"
 python -m pytest tests
 python scripts/generate_dataset.py --root dataset --n 8 --length 12
-# then train gpu_train_v01 on cuda / bf16 — fill the bring-up report
+# train gpu_train_v01 cuda bf16 — not 6.8B
 ```
 
-Do not instantiate `research_v01` on this pod. Do not download foundation
-models. Dataset is SyntheticWorld v1.
+## November (100–200k RUB)
+
+2× H200 or 1× B300. FSDP, activation checkpointing, episode streaming.  
+Yunmu package: `models/MINA-6.8B` + docs. Weights after curriculum gates.
 
 ## Not now
 
-- Stage B YAML until Maga reads the report
-- H100/H200 for bring-up
-- overnight pod without auto-stop
-- treating `loss ↓` as success
+- training 6.8B on 96 GB
+- overnight without auto-stop
+- `loss ↓` as success
+- LLM downloads

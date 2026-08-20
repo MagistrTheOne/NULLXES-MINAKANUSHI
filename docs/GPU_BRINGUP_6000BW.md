@@ -4,7 +4,7 @@ Fill this file after Stage A. Do not overwrite with “loss went down.”
 This is the first Blackwell snapshot. In three months it is the baseline.
 
 **Status:** empty — fill during the $30 bring-up session.  
-**Profile:** `gpu_train_v01` (6.2M). Not `research_v01`.  
+**Profile:** `gpu_train_v01` (6.2M instrument). Not `minakanushi_6_8b`.  
 **Tag:** `MINAKANUSHI-v0.1-foundation`
 
 6.2M in MINA is not an LLM-6M toy. It already has world slots, memory,
@@ -51,7 +51,7 @@ device: cuda
 ## Bring-up results
 
 ```text
-pytest:                  # expected 66 passed
+pytest:                  # expected 67 passed (includes 6.8B YAML inventory, no construct)
 dataset_generate:        # scripts/generate_dataset.py
 forward_ok:
 backward_ok:

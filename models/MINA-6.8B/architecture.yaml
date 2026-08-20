@@ -6,14 +6,20 @@ identity:
   native_runtime: nullxes
   architecture_version: "0.1"
 
-# Canonical research target (1.3B rung). Yunmu/Warmcore contract is
-# configs/architecture/minakanushi_6_8b.yaml (6.8B). Do not instantiate on CPU tests.
-latent_dim: 2048
-state_dim: 2048
-memory_dim: 2048
+# NULLXES MINAKANUSHI 6.8B — contractual research profile (Yunmu / Warmcore).
+# Formula inventory: 6_799_130_646 parameters.
+# Canonical loader path: configs/architecture/minakanushi_6_8b.yaml
+# Do NOT instantiate on CPU tests or on the $30 RTX 6000 bring-up pod.
+
+profile_name: minakanushi_6_8b
+short_name: MINA
+
+latent_dim: 4096
+state_dim: 4096
+memory_dim: 4096
 world_slots: 512
 memory_slots: 1024
-core_depth: 24
+core_depth: 32
 uncertainty_channels: 8
 dropout: 0.0
 

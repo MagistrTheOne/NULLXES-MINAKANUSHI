@@ -15,6 +15,7 @@ experiments/
 outputs/
 logs/
 dataset/
+models/MINA-6.8B/checkpoints/
 *.mina
 *.pt
 *.pth

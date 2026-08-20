@@ -102,4 +102,4 @@ Organism order (Maga). Do not implement a later gate in an earlier PR.
 | 10 | Embodiment adapters | not this PR |
 | 11 | Language interface | not this PR |
 
-Do not instantiate `research_v01`. Do not add vision, LLM, or extra deps.
+Do not instantiate `minakanushi_6_8b` or `research_v01` in tests. Do not add vision, LLM, or extra deps. Target profile: **MINA 6.8B** (`docs/MINA_6_8B_TRAINING.md`).

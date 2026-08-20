@@ -1,92 +1,45 @@
 # MINA training plan — Maga sign-off
 
-NULLXES MINAKANUSHI. Not an LLM scale-up. Weights grow only after the
-internal world gets more accurate.
+**Target:** NULLXES MINAKANUSHI **6.8B** (`minakanushi_6_8b` / `models/MINA-6.8B`).  
+`gpu_train_v01` 6.2M is a stack **instrument**, not a product line.
 
-**Now:** tag `MINAKANUSHI-v0.1-foundation` exists. Budget **~$30**.  
-**November:** **100–200k RUB** for medium + `research_v01` on H100/H200.  
-**Not now:** multi-GPU 5–10B, vision, language, embodiment.
+**Now:** ~$30 on RTX PRO 6000 BW → prove CUDA/bf16/checkpoint on 6.2M.  
+**November:** 100–200k RUB → 6.8B train on H200/B300.  
+Warmcore may jointly finetune on NULLXES episodes after the pilot package.
+
+See `docs/MINA_6_8B_TRAINING.md`.
 
 ---
 
 ## Order
 
 ```text
-COMMIT + TAG          done
-        ↓
-RTX PRO 6000 BW       ~$1.69/h Community
-        ↓
-Stage A  gpu_train_v01  6.2M   2–3 hours
-        ↓
-docs/GPU_BRINGUP_6000BW.md     mandatory artifact
-        ↓
-Decision
-   FAIL  → stop, no medium
-   PASS + scaling signs → Stage B when November money lands
-        ↓
-MINA-medium  ~100–300M  (latent 1024, slots 256/512, depth 12)
-        ↓
-H100/H200
-        ↓
-research_v01  1.3B
-        ↓
-only then multi-GPU 5–10B+
+MINAKANUSHI 6.8B          contract (config exists, weights do not)
+
+today  1× RTX PRO 6000 BW
+  gpu_train_v01 6.2M instrument
+  docs/GPU_BRINGUP_6000BW.md
+  STOP — do not construct 6.8B on this pod
+
+November
+  FSDP + bf16 + activation checkpoint + Adam shard
+  2× H200 or 1× B300
+  physical episode curriculum
+  validation: belief / memory / WAIT≠MOVE / OOD
+
+then
+  humanoid sim adapter (ActionIntent, 170–180 cm SelfModel)
+  Yunmu review
+  optional Warmcore joint *.mina
 ```
 
-Stage B is **not** automatic after A. NaN, VRAM leak, or dataset bottleneck
-→ medium is forbidden.
+---
+
+## Success
+
+Not `loss ↓`. Belief, memory effect, action causality, OOD.  
+If 6.8B is not better than the 6.2M instrument on those, stop.
 
 ---
 
-## What 6.2M is
-
-Not “LLM with 6 million parameters.”
-
-It already contains: world slots, memory, uncertainty, future branches,
-authority, runtime, belief. Stage A is a **causality-loop** test on Blackwell.
-
----
-
-## What success is
-
-Not `loss ↓`.
-
-```text
-Belief     correct state ↑
-Memory     with-memory > without-memory
-Action     WAIT future ≠ MOVE_TO future
-OOD        new combination, not train replay
-```
-
-If bigger model only makes step/s worse and belief stays flat, stop scaling.
-
----
-
-## Money
-
-| When | Money | Allowed |
-|---|---|---|
-| now | ~$30 ≈ 14–17 h on 6000 BW | Stage A + report; maybe a second A if first dies |
-| November | 100–200k RUB | Stage B smoke + `research_v01` on H100/H200 |
-| later | more | 5–10B only after 1.3B proved |
-
-Do not spend November money on Stage B if the bring-up report says FAIL.
-
----
-
-## Profiles (same architecture family)
-
-| Name | Params | When |
-|---|---:|---|
-| `cpu_dev` | 0.21M | tests, already done |
-| `gpu_train_v01` | 6.2M | Stage A now |
-| MINA-medium | ~100–300M | after A PASS, November |
-| `research_v01` | 1.3B | H100/H200 after medium |
-| 5–10B | later | multi-GPU, not this year unless Maga opens it |
-
-Learned: perception, NPF, DWC, uncertainty, memory read, future.  
-Not learned: slots, constraints, authority, ActionIntent.
-
----
-
-Maga: this file is the training contract until revised.
+Maga: 6.8B is the training contract. 6.2M is not a direction.

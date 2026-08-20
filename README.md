@@ -22,8 +22,8 @@ python -m pytest tests
 python scripts/generate_dataset.py --root dataset --n 4 --length 8
 ```
 
-CPU only. Do not instantiate `research_v01`. Checkpoints are `*.mina` and are
-not committed.
+CPU only. Do not instantiate `minakanushi_6_8b` or `research_v01` in tests.
+Checkpoints are `*.mina` and are not committed.
 
 ## What exists now (Milestone 1 foundation)
 
@@ -46,11 +46,12 @@ evaluated before policy selection and cannot be overridden by value.
 
 | Profile | Path | latent | slots | depth | Role |
 |---|---|---:|---:|---:|---|
-| research_v01 | `configs/architecture/research_v01.yaml` | 2048 | 512 | 24 | canonical research target |
-| gpu_train_v01 | `configs/architecture/gpu_train_v01.yaml` | 256 | 64 | 6 | GPU training |
+| **minakanushi_6_8b** | `configs/architecture/minakanushi_6_8b.yaml` / `models/MINA-6.8B/` | 4096 | 512 | 32 | **Yunmu contract · 6.8B** |
+| research_v01 | `configs/architecture/research_v01.yaml` | 2048 | 512 | 24 | 1.3B rung, not the product target |
+| gpu_train_v01 | `configs/architecture/gpu_train_v01.yaml` | 256 | 64 | 6 | GPU bring-up instrument (6.2M) |
 | cpu_dev | `configs/architecture/cpu_dev.yaml` | 64 | 16 | 2 | tests / CPU loop |
 
-All dimensions are configuration. Model code must not assume 2048.
+All dimensions are configuration. Model code must not assume 2048 or 4096.
 
 ## Training
 
@@ -109,5 +110,6 @@ Not in scope: chat, coding assistants, RAG agents, wrapping Qwen/Llama/GPT.
 - `docs/GATE_08_5_DATASET.md` — Dataset Reality Check (not Gate 09)
 - `docs/GATE_09_RUNTIME.md` — Autonomous Runtime (`cycle()`, RuntimeState)
 - `docs/DATASET_V1.md` — SyntheticWorld dataset contract
-- `docs/RUNPOD.md` — RTX 6000 BW Stage A (`gpu_train_v01`)
+- `docs/MINA_6_8B_TRAINING.md` — 6.8B contract (Yunmu / Warmcore)
+- `docs/RUNPOD.md` — RTX 6000 BW Stage A (`gpu_train_v01` instrument)
 - `docs/PRETRAINING_GATE_01.md`
