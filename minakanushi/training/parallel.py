@@ -169,13 +169,7 @@ def collect_full_checkpoint(module: nn.Module, optimizer: Optimizer | None) -> d
         system = get_model_state_dict(module, options=options)
         opt_state = None
         if optimizer is not None:
-            from minakanushi.training.optimizer_state import normalize_optimizer_state
-
-            opt_state = normalize_optimizer_state(
-                module,
-                optimizer,
-                get_optimizer_state_dict(module, optimizer, options=options),
-            )
+            opt_state = get_optimizer_state_dict(module, optimizer, options=options)
         dist_barrier()
         if not is_rank0():
             return None
@@ -210,22 +204,16 @@ def apply_full_checkpoint(module: nn.Module, optimizer: Optimizer | None, payloa
         from torch.distributed.checkpoint.state_dict import (
             StateDictOptions,
             set_model_state_dict,
-            set_optimizer_state_dict,
         )
 
         options = StateDictOptions(full_state_dict=True)
         set_model_state_dict(module, model_state_dict=system_state, options=options)
         if optimizer is not None:
-            from minakanushi.training.optimizer_state import normalize_optimizer_state
+            from minakanushi.training.optimizer_state import apply_optimizer_checkpoint
 
             if payload.get("optimizer") is None:
                 raise ValueError("checkpoint has no optimizer state; refusing silent resume")
-            set_optimizer_state_dict(
-                module,
-                optimizer,
-                optim_state_dict=normalize_optimizer_state(module, optimizer, payload["optimizer"]),
-                options=options,
-            )
+            apply_optimizer_checkpoint(optimizer, payload["optimizer"])
         return
     incompatible = module.load_state_dict(system_state, strict=True)
     if incompatible.missing_keys or incompatible.unexpected_keys:

@@ -1,9 +1,12 @@
-"""Normalize Adam optimizer payloads for FSDP2 resume.
+"""Load H200 integer-id Adam state onto FSDP2-wrapped 6.8B.
 
-H200 Status Core saved full optimizer state keyed by integer param ids
-(`state.28.step` after flatten). FSDP2 `set_optimizer_state_dict` builds an
-FQN mapping and raises KeyError on those ids. Weights-only load would be a
-clone. This remaps ids → named_parameters FQNs so resume stays the same run.
+Status Core `*.mina` stores optimizer as `state[28]['step']` (or flattened
+`state.28.step`). FSDP2 `set_optimizer_state_dict` unflattens via an FQN map
+and raises KeyError (`state.28.step`, then `perception.vector.net.0.weight`
+if those ids are rewritten to dotted FQNs).
+
+Weights still go through `set_model_state_dict`. Optimizer moments are placed
+onto `optimizer.param_groups` in constructor order — the same run, not a clone.
 """
 
 from __future__ import annotations
@@ -17,37 +20,87 @@ from torch.optim import Optimizer
 
 _INTEGER_FLAT_STATE = re.compile(r"^state\.(\d+)\.(.+)$")
 _INTEGER_FLAT_GROUP = re.compile(r"^param_groups\.(\d+)\.(.+)$")
+_MOMENT_KEYS = frozenset({"exp_avg", "exp_avg_sq", "max_exp_avg_sq"})
 
 
-def optimizer_param_fqns(module: nn.Module, optimizer: Optimizer) -> tuple[str, ...]:
-    """FQNs in AdamW constructor order (`module.parameters()`)."""
-    id_to_name = {id(param): name for name, param in module.named_parameters()}
-    names: list[str] = []
+def optimizer_params(optimizer: Optimizer) -> list[nn.Parameter]:
+    params: list[nn.Parameter] = []
     for group in optimizer.param_groups:
         for param in group["params"]:
-            name = id_to_name.get(id(param))
-            if name is None:
-                raise ValueError("optimizer param is not in module.named_parameters(); refusing silent resume")
-            names.append(name)
-    if not names:
+            params.append(param)
+    if not params:
         raise ValueError("optimizer has no parameters")
-    return tuple(names)
+    return params
 
 
-def normalize_optimizer_state(
-    module: nn.Module,
-    optimizer: Optimizer,
-    opt_state: Any,
-) -> dict[str, Any]:
-    """Return FQN-keyed optimizer state for FSDP2 set_optimizer_state_dict."""
+def integer_optimizer_state(opt_state: Any) -> dict[str, Any]:
+    """Nested `{state, param_groups}` with integer param ids."""
     if opt_state is None:
         raise ValueError("checkpoint has no optimizer state; refusing silent resume")
     if not isinstance(opt_state, dict):
         raise ValueError(f"optimizer state must be a dict, got {type(opt_state).__name__}")
-    nested = _maybe_unflatten_integer_optimizer(opt_state)
-    fqns = optimizer_param_fqns(module, optimizer)
-    id_to_name = {id(param): name for name, param in module.named_parameters()}
-    return _remap_integer_state_to_fqn(nested, fqns, id_to_name=id_to_name)
+    return _maybe_unflatten_integer_optimizer(opt_state)
+
+
+def apply_optimizer_checkpoint(optimizer: Optimizer, opt_state: Any) -> None:
+    """Write checkpoint Adam moments onto the live optimizer. Fail loud on shape/id mismatch."""
+    nested = integer_optimizer_state(opt_state)
+    raw_state = nested.get("state") or {}
+    params = optimizer_params(optimizer)
+    if not raw_state:
+        return
+    sample = next(iter(raw_state))
+    if isinstance(sample, str) and not str(sample).isdigit():
+        raise ValueError(
+            f"optimizer state is FQN-keyed ({sample!r}); FSDP2 resume expects integer ids from H200 *.mina"
+        )
+    for key, fields in raw_state.items():
+        index = int(key)
+        if index < 0 or index >= len(params):
+            raise ValueError(
+                f"optimizer state index {index} out of range for {len(params)} parameters; "
+                "refusing silent resume"
+            )
+        param = params[index]
+        if not isinstance(fields, dict):
+            raise ValueError(f"optimizer state[{index}] must be a dict")
+        placed: dict[str, Any] = {}
+        for name, value in fields.items():
+            if name in _MOMENT_KEYS and torch.is_tensor(value):
+                placed[name] = _moment_like_param(value, param, index=index, name=name)
+            elif torch.is_tensor(value):
+                placed[name] = value.detach().to(device=param.device)
+            else:
+                placed[name] = value
+        optimizer.state[param] = placed
+    groups = nested.get("param_groups") or []
+    if groups:
+        src = groups[0]
+        for group in optimizer.param_groups:
+            for field in ("lr", "weight_decay", "betas", "eps", "amsgrad"):
+                if field in src:
+                    group[field] = src[field]
+
+
+def _moment_like_param(value: torch.Tensor, param: nn.Parameter, *, index: int, name: str) -> torch.Tensor:
+    source = value.detach()
+    if type(source).__name__ == "DTensor" and hasattr(source, "full_tensor"):
+        source = source.full_tensor()
+    if type(param).__name__ == "DTensor":
+        from torch.distributed.tensor import distribute_tensor
+
+        full = source.to(device=param.device, dtype=param.dtype)
+        if tuple(full.shape) != tuple(param.shape):
+            raise ValueError(
+                f"optimizer {name} index {index} shape {tuple(full.shape)} != DTensor param {tuple(param.shape)}"
+            )
+        return distribute_tensor(full, param.device_mesh, param.placements)
+    out = source.to(device=param.device, dtype=param.dtype)
+    if tuple(out.shape) != tuple(param.shape):
+        raise ValueError(
+            f"optimizer {name} index {index} shape {tuple(out.shape)} != param {tuple(param.shape)}"
+        )
+    return out
 
 
 def _maybe_unflatten_integer_optimizer(opt_state: dict[str, Any]) -> dict[str, Any]:
@@ -97,67 +150,4 @@ def _coerce_group_params(group: dict[str, Any]) -> dict[str, Any]:
     params = out.get("params")
     if isinstance(params, dict):
         out["params"] = [params[i] for i in range(len(params))]
-    return out
-
-
-def _remap_integer_state_to_fqn(
-    opt_state: dict[str, Any],
-    fqns: tuple[str, ...],
-    *,
-    id_to_name: dict[int, str] | None = None,
-) -> dict[str, Any]:
-    raw_state = opt_state.get("state") or {}
-    groups = [
-        _rewrite_group_params(group, fqns, id_to_name=id_to_name)
-        for group in opt_state.get("param_groups") or []
-    ]
-    if not raw_state:
-        return {"state": {}, "param_groups": groups}
-    sample = next(iter(raw_state))
-    if isinstance(sample, str) and not str(sample).isdigit():
-        return {"state": dict(raw_state), "param_groups": groups}
-
-    remapped: dict[str, Any] = {}
-    for key, value in raw_state.items():
-        index = int(key)
-        if index < 0 or index >= len(fqns):
-            raise ValueError(
-                f"optimizer state index {index} out of range for {len(fqns)} parameters; "
-                "refusing silent resume"
-            )
-        remapped[fqns[index]] = value
-    if not groups:
-        groups = [{"params": list(fqns)}]
-    return {"state": remapped, "param_groups": groups}
-
-
-def _rewrite_group_params(
-    group: dict[str, Any],
-    fqns: tuple[str, ...],
-    *,
-    id_to_name: dict[int, str] | None = None,
-) -> dict[str, Any]:
-    out = {k: v for k, v in group.items() if k != "params"}
-    params = group.get("params")
-    if params is None:
-        out["params"] = list(fqns)
-        return out
-    rewritten: list[str] = []
-    for item in params:
-        if isinstance(item, str) and not item.isdigit():
-            rewritten.append(item)
-            continue
-        if torch.is_tensor(item) or isinstance(item, nn.Parameter):
-            if not id_to_name:
-                raise ValueError("optimizer param_groups still hold live tensors; refusing silent resume")
-            name = id_to_name.get(id(item))
-            if name is None:
-                raise ValueError("optimizer param_groups tensor is not in module.named_parameters()")
-            rewritten.append(name)
-            continue
-        index = int(item)
-        if index < 0 or index >= len(fqns):
-            raise ValueError(f"param_groups index {index} out of range for {len(fqns)} parameters")
-        rewritten.append(fqns[index])
-    out["params"] = rewritten
     return out
