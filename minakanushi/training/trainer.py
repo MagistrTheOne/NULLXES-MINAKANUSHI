@@ -619,7 +619,7 @@ def _diagnose_run(logs: list[TrainLog]) -> str | None:
         return "loss collapsed to zero immediately"
     if last.grad_norm > 1e6:
         return "gradient norm diverges"
-    if last.step >= 20:
+    if len(logs) >= 20:
         window = logs[:20]
         losses = [x.loss for x in window]
         if max(losses) - min(losses) < 1e-8:
