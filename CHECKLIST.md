@@ -14,11 +14,27 @@
 |---|---|---|---|
 | Ноут / CPU | Windows CPU | тесты, v0.2 gate (`cpu_dev`), Identity Init (штамп zip), JSON-генератор, пакет V2 MM | конструировать 6.8B |
 | Stage A (закрыт) | 1× RTX PRO 6000 BW 96 GB · pod `gn3eqwxuht23qs` · ~$2.09–2.40/ч | только `gpu_train_v01` 6.2M, Gate 03B n=1000 | train 6.8B |
-| Status Core / sanity | **1× H200 SXM 141 GB** · ~$4.59/ч + диск | 6.8B FSDP2 bf16, step64, resume v0.2 | гасить, пока идёт работа |
-| Длинный train | **2× H200** или **1× B300 ~288 GB** | полный AdamW 6.8B | 1× H100 80GB train |
+| Status Core / sanity | **1× H200 SXM 141 GB** · ~$4.59/ч + диск | 6.8B FSDP2 bf16, step64; запас если B300 ещё нет | не train на 6000 |
+| След. неделя (цель) | **1× B300 ~288 GB** | v0.2 resume + обучение на `dataset/mina_6_8b` | сырой HF video / Cosmos / LeRobot RGB |
+| Длинный train | **2× H200** или тот же **1× B300** | полный AdamW 6.8B | 1× H100 80GB train |
 | Infer / Yunmu dry-run | 6000 BW или 1× H100 80GB | веса bf16 ~13.6 GB + голова мира | не путать с train |
 
 HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B) · `minakanushi_stage0_step64.mina`
+
+## Бюджет B300 (MVP обученной машины)
+
+Тариф: **$7.89 / GPU·ч**. Диск в сумму не входит (меняется). Степ-тайм 6.8B на B300 в репо **не замерян** (H200 step64 был, wall-clock в карточку не записали). Ниже — потолки, не обещание часов.
+
+| Конверт | GPU·ч | $ | Что внутри |
+|---|---:|---:|---|
+| Минимум | ~8 | **~$65** | подъём + один job `steps: 64` если шаг ~2–4 мин |
+| **MVP потолок (заложить)** | **~32** | **$250** | подъём + 64 шага + один рестарт/OOM + eval + 4–8 ч буфер |
+| Жёсткий стоп | ~50 | **$400** | второй сегмент 64 или шаг оказался ~8–10 мин |
+| Ошибка «забыл Stop» | 24 / сут | **$189 / сут** | неделя Running ≈ **$1320** — это не MVP |
+
+**Заложить на MVP: $250. Резать под $400. Не держать Running без job.**
+
+CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только resume с `dataset_root`.
 
 ---
 
@@ -58,13 +74,18 @@ HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/Mag
   *не train, нет `identity_loss`.*  
   `python scripts/identity_init.py --checkpoint … --out …/MINA-6.8B-IdentityBound.mina`
 
-- [ ] **1. JSON curriculum 1000** — CPU  
-  `--n 250` × 4 фазы (physics → agency → causality → embodiment), off git  
+- [ ] **1. JSON curriculum 1000 + фильтр** — CPU  
+  SOURCE OF TRUTH: `dataset/mina_6_8b` (наш генератор, не Hub dump).  
+  `--n 250` × 4 фазы (physics → agency → causality → embodiment), off git.  
+  Фильтр качества: `scripts/audit_curriculum.py` — ключи 6.8B, `pwm=false`, фазы, transitions.  
+  Фильтр источника: в лосс только native JSON; Minari/D4RL/Open-X — **adapter** в Observation/ActionIntent, не raw.  
+  Отвергнуть: NVIDIA PhysicalAI / Cosmos video, LeRobot RGB (pixels = Gate 9+, не v0.2).  
   `python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b --n 250`  
   `python scripts/audit_curriculum.py`
 
-- [ ] **2. Resume v0.2** — **1× H200** (тот же модель, не clone)  
-  optimizer + RNG + cursor + scheduler + identity  
+- [ ] **2. Resume v0.2** — **1× B300** (след. неделя; иначе 1× H200)  
+  тот же модель: optimizer + RNG + cursor + scheduler + identity, не clone  
+  `dataset_root: dataset/mina_6_8b` в `mina_6_8b_v02.yaml`  
   `torchrun … scripts/train.py --config configs/training/mina_6_8b_v02.yaml --resume IdentityBound.mina`
 
 - [ ] **3. Acceptance Gate** — сначала CPU `cpu_dev`  
@@ -79,7 +100,7 @@ HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/Mag
 
 ## Позже (не смешивать с 1.0)
 
-- [ ] **Длинный 6.8B** — 2× H200 или 1× B300 · тот же freeze
+- [ ] **Длинный 6.8B** — тот же **1× B300** (или 2× H200) · тот же freeze · тот же `mina_6_8b` JSON
 - [ ] **Gate 9+ perception** — pixels → MinaUnit
 - [ ] **MINA V2 MM** — эксперимент уже в `models/MINA-V2-MM/` + `docs/experiments/MINA_V2_MULTIMODAL.md`  
   органы → MinaUnit, не VLA/Cosmos; **не исполнять как train**, пока Yunmu/Gate 9+ не закрыты
