@@ -20,6 +20,30 @@ def _tiny() -> tuple[nn.Module, torch.optim.AdamW]:
     return module, opt
 
 
+def test_as_local_tensor_uses_to_local_not_full_tensor() -> None:
+    from minakanushi.training.optimizer_state import _as_local_tensor
+
+    class DTensor:
+        def __init__(self) -> None:
+            self._local = torch.ones(2, 3)
+            self.full_tensor_calls = 0
+
+        def to_local(self) -> torch.Tensor:
+            return self._local
+
+        def full_tensor(self) -> torch.Tensor:
+            self.full_tensor_calls += 1
+            raise AssertionError("full_tensor all-gathers and dies on CPU DTensor")
+
+        def detach(self):
+            return self
+
+    fake = DTensor()
+    out = _as_local_tensor(fake)  # type: ignore[arg-type]
+    assert torch.equal(out, torch.ones(2, 3))
+    assert fake.full_tensor_calls == 0
+
+
 def test_integer_nested_state_restores_moments() -> None:
     module, opt = _tiny()
     params = list(module.parameters())

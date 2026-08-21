@@ -69,7 +69,7 @@ def apply_optimizer_checkpoint(optimizer: Optimizer, opt_state: Any) -> None:
             if name in _MOMENT_KEYS and torch.is_tensor(value):
                 placed[name] = _moment_like_param(value, param, index=index, name=name)
             elif torch.is_tensor(value):
-                placed[name] = value.detach().to(device=param.device)
+                placed[name] = _as_local_tensor(value).to(device=_param_local_device(param))
             else:
                 placed[name] = value
         optimizer.state[param] = placed
@@ -82,20 +82,44 @@ def apply_optimizer_checkpoint(optimizer: Optimizer, opt_state: Any) -> None:
                     group[field] = src[field]
 
 
-def _moment_like_param(value: torch.Tensor, param: nn.Parameter, *, index: int, name: str) -> torch.Tensor:
-    source = value.detach()
-    if type(source).__name__ == "DTensor" and hasattr(source, "full_tensor"):
-        source = source.full_tensor()
-    if type(param).__name__ == "DTensor":
-        from torch.distributed.tensor import distribute_tensor
+def _is_dtensor(value: object) -> bool:
+    return type(value).__name__ == "DTensor"
 
-        full = source.to(device=param.device, dtype=param.dtype)
-        if tuple(full.shape) != tuple(param.shape):
-            raise ValueError(
-                f"optimizer {name} index {index} shape {tuple(full.shape)} != DTensor param {tuple(param.shape)}"
+
+def _param_local_device(param: nn.Parameter) -> torch.device:
+    if _is_dtensor(param):
+        return param.to_local().device
+    return param.device
+
+
+def _as_local_tensor(value: torch.Tensor) -> torch.Tensor:
+    """Dense shard/full tensor. Never full_tensor() — that all-gathers and dies on CPU DTensor."""
+    if _is_dtensor(value):
+        return value.to_local().detach()
+    return value.detach()
+
+
+def _moment_like_param(value: torch.Tensor, param: nn.Parameter, *, index: int, name: str) -> torch.Tensor:
+    dense = _as_local_tensor(value)
+    if _is_dtensor(param):
+        from torch.distributed.tensor import DTensor, distribute_tensor
+
+        local = param.to_local()
+        dense = dense.to(device=local.device, dtype=param.dtype)
+        if tuple(dense.shape) == tuple(local.shape):
+            return DTensor.from_local(
+                dense,
+                param.device_mesh,
+                param.placements,
+                run_check=False,
             )
-        return distribute_tensor(full, param.device_mesh, param.placements)
-    out = source.to(device=param.device, dtype=param.dtype)
+        if tuple(dense.shape) == tuple(param.shape):
+            return distribute_tensor(dense, param.device_mesh, param.placements)
+        raise ValueError(
+            f"optimizer {name} index {index} shape {tuple(dense.shape)} "
+            f"!= DTensor local {tuple(local.shape)} or global {tuple(param.shape)}"
+        )
+    out = dense.to(device=param.device, dtype=param.dtype)
     if tuple(out.shape) != tuple(param.shape):
         raise ValueError(
             f"optimizer {name} index {index} shape {tuple(out.shape)} != param {tuple(param.shape)}"
