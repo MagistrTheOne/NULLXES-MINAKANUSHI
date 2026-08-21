@@ -18,57 +18,55 @@ base_model: []
 
 # MINAKANUSHI-6.8B
 
-**NULLXES MINAKANUSHI 6.8B Status Core (Researched)**
+**NULLXES MINAKANUSHI** — adaptive situational intelligence for autonomous physical systems.
 
 ```text
-HF repo:      MagistrTheOne/MINAKANUSHI-6.8B
 architecture: MINAKANUSHI
 short name:   MINA
 organization: NULLXES
 author:       MagistrTheOne
-status:       Researched / Status Core
-native unit:  MinaUnit  (not a token)
-checkpoint:   *.mina
+parameters:   6 799 130 646
+latent_dim:   4096
+state_dim:    4096
+memory_dim:   4096
+core_depth:   32
+world_slots:  512
+memory_slots: 1024
+native unit:  MinaUnit
 ```
 
-This is an adaptive situational intelligence checkpoint for autonomous physical systems. It is **not** a chatbot, not a decoder-only LLM, and not a wrapper around Qwen / Llama / Mistral / Gemma / DeepSeek / GPT / Claude.
+Not a chatbot. Not a VLA. Not a wrapper around Qwen / Llama / Mistral / Gemma / DeepSeek / GPT / Claude.
 
-Code and runtime: [MagistrTheOne/NULLXES-MINAKANUSHI](https://github.com/MagistrTheOne/NULLXES-MINAKANUSHI)
-
-Intended readers: **Yunmu**, **Warmcore**, and NULLXES operators. Same product line, same identity, not a one-off experiment.
+Code: [MagistrTheOne/NULLXES-MINAKANUSHI](https://github.com/MagistrTheOne/NULLXES-MINAKANUSHI)
 
 ---
 
-## What this model is for
+## Model parameters (frozen profile `minakanushi_6_8b`)
 
-MINAKANUSHI infers world state from incomplete observations, keeps uncertainty explicit, predicts multiple futures, ranks strategies, and emits `ActionIntent` only after hard human constraints.
+Formula inventory: **6 799 130 646** parameters. Architecture freeze `7aba976`. Do not change these to “make it train”.
 
-```text
-observation → MinaUnit → NullxesPositionField → WorldState
-  → DynamicWorldCore → memory + uncertainty → situation
-  → futures → strategies → ConstraintKernel → ActionIntent
-```
+| Parameter | Value |
+|---|---|
+| `profile_name` | `minakanushi_6_8b` |
+| `short_name` | MINA |
+| `latent_dim` / `state_dim` / `memory_dim` | **4096** |
+| `core_depth` (DWC) | **32** |
+| `world_slots` | **512** |
+| `memory_slots` | **1024** |
+| `uncertainty_channels` | **8** |
+| `dropout` | 0.0 |
+| `future_branches` | 3 |
+| `cognition.budget` | 4 |
+| `cognition.convergence_threshold` | 0.02 |
+| `prediction_horizons` | immediate 1 · short 4 · medium 8 |
+| `dt` | 0.1 s |
+| `max_sources` / `max_observations` | 64 / 64 |
+| NPF `num_frequencies` | 32 |
+| persistence steps / retire | 8 / 0.95 |
+| weights infer bf16 | ~13.6 GB |
+| train | FSDP2 ZeRO-3, bf16 compute, AdamW |
 
-Intended use:
-
-- synthetic and later physical world-state research
-- mobile inspection / patrol under human no-go zones
-- warehouse AMR policy research
-- Yunmu / Warmcore humanoid **simulation** adapters later (ActionIntent in, their controller out)
-
-Out of scope:
-
-- chat, coding assistants, RAG agents
-- next-token generation as the cognitive primitive
-- raw motor PWM / actuator voltage
-
-MINA never emits motor PWM. Hardware control stays in a deterministic downstream controller.
-
----
-
-## Identity (not a system prompt)
-
-Identity lives in architecture YAML, `*.mina` manifest, and runtime metadata.
+Identity (checkpoint metadata, not a prompt):
 
 ```yaml
 architecture: MINAKANUSHI
@@ -77,183 +75,139 @@ system_class: adaptive_situational_intelligence
 architecture_generation: 1
 native_runtime: nullxes
 architecture_version: "0.1"
-short_name: MINA
 ```
-
-SelfModel is a structured passport (embodiment, capabilities, authority). It is not a Transformer identity head and not an "I AM MINAKANUSHI" text objective. Authority can disable autonomous selection (`policy_enabled=false`) without turning cognition off. Hard constraints still win.
 
 ---
 
-## Checkpoint in this repo
+## Checkpoints (repo root)
 
-| Field | Value |
+| File | What |
 |---|---|
-| Display name | NULLXES MINAKANUSHI 6.8B Status Core (Researched) |
-| File | `checkpoints/minakanushi_stage0_step64.mina` |
-| Format | native `nullxes-minakanushi` zip (`ZIP_STORED`), sharded tensors |
-| Profile | `minakanushi_6_8b` |
-| Parameters (formula) | **6 799 130 646** |
-| latent / DWC / slots | 4096 / 32 / 512 world + 1024 memory |
-| Train config | `configs/mina_6_8b_status_core_researched.yaml` |
-| Hardware | 1× NVIDIA H200, FSDP2 ZeRO-3, bf16 compute, fp32 weights |
-| Steps | 64 (seed 11), final-only checkpoint |
-| Source git | `d70bfc0` |
+| [`minakanushi_stage0_step64.mina`](minakanushi_stage0_step64.mina) | Status Core v0.1 · 1× H200 · seed 11 · git `d70bfc0` · 64 steps |
+| [`minakanushi_stage0_step128.mina`](minakanushi_stage0_step128.mina) | Status Core v0.2 · 1× B300 · resume IdentityBound · JSON curriculum · steps **65–128** · git `ede6bda` |
 
-This Status Core drop is the first **working** 6.8B training line with a named artifact. The earlier 20-step sanity run is a probe, not this release.
+Format: native `nullxes-minakanushi` zip (`ZIP_STORED`). Same architecture. v0.2 is a continuation (optimizer + identity), not a clone.
 
-### Measured Status Core signals (step 64)
+Safetensors shards are a **later** Hugging Face mirror (Hub parameter badge). They are not the runtime. Canonical load stays `load_mina`. Do not convert step64. See `docs/HF_SAFETENSORS_MIRROR.md`.
+
+Also at root: `metrics_v02.jsonl`, `train_v02.log`.
+
+```text
+observation → MinaUnit → NullxesPositionField → WorldState
+  → DynamicWorldCore → memory + uncertainty → situation
+  → futures → strategies → ConstraintKernel → ActionIntent
+```
+
+MINA emits **ActionIntent**. Never raw PWM.
+
+---
+
+## Checklist
+
+Freeze: do not add layers / MoE / language head / `identity_loss`. Do not train 6.8B on CPU, RTX PRO 6000, or 1× H100 80GB.
+
+### Closed
+
+- [x] Gate 09 Runtime — `observe → intent → restore` (`cpu_dev`)
+- [x] Stage A GPU — 6.2M CUDA/bf16/AMP/`.mina` (stack, not intelligence)
+- [x] Gate 03B hidden direction — n=1000 · detected 0.986 · false_revision 0.0
+- [x] Status Core v0.1 step 64 — 1× H200 FSDP2 bf16
+- [x] Identity Initialization — passport stamp, no `identity_loss`
+- [x] JSON curriculum 1000 — physics/agency/causality/embodiment × 250 · `pwm=false`
+- [x] Resume v0.2 — 1× B300 · same model · `dataset/mina_6_8b` in the loss · steps 65–128
+
+### Open
+
+- [ ] Acceptance Gate v0.2 — `scripts/gate_v02_acceptance.py` (`cpu_dev` first)
+- [ ] Yunmu review — ActionIntent in, their controller out; not before the gate
+- [ ] HF safetensors mirror — after Acceptance Gate; `.mina` stays canonical; see `docs/HF_SAFETENSORS_MIRROR.md`
+- [ ] Long 6.8B — same freeze, same native JSON
+- [ ] Gate 9+ perception — pixels → MinaUnit
+- [ ] MINA V2 MM — organs → MinaUnit (not VLA/Cosmos); not train until Yunmu/Gate 9+
+
+### Must-hold
+
+```text
+constraint_violation_count == 0
+persistence / reacquisition stay high
+false_revision_rate stays low
+hard constraints beat higher-value illegal strategies
+ActionIntent ≠ PWM
+```
+
+---
+
+## Measured signals
+
+### v0.1 · step 64 · H200
 
 | Signal | Value |
 |---|---|
 | loss | 78.36 |
 | future ADE / FDE | 3.42 / 0.81 |
 | world position error | 1.07 |
-| uncertainty calibration error | 0.38 |
-| entity persistence / reacquisition | 1.0 / 1.0 |
+| uncertainty calibration | 0.38 |
+| persistence / reacquisition | 1.0 / 1.0 |
 | constraint_violation_count | **0** |
 | closed_loop_success_rate | 1.0 |
 | false_revision_rate | 0.0 |
 
-Loss going down is logged. It is not the architecture gate. Belief-revision accuracy on this short synthetic segment is still incomplete; that is a training-data job, not a reason to swap the architecture.
+### v0.2 · step 128 · B300 (JSON resume)
+
+| Signal | Value |
+|---|---|
+| loss | 41.10 |
+| step time (steady) | fwd ~1.42 s · bwd ~0.58 s |
+| persistence / reacquisition | 1.0 / 1.0 |
+| constraint_violation_count | **0** |
+| closed_loop_success_rate | 1.0 |
+| false_revision_rate | 0.0 |
+| future ADE / FDE | 2.05 / 0.68 |
+| world position error | 0.55 |
+| uncertainty calibration | 0.19 |
+| revision_accuracy | 0.0 |
+| branch_coverage | 0.0 |
+
+Loss on mixed JSON phases is not the architecture gate. Revision accuracy and branch coverage are still not a pass. Do not add layers.
 
 ---
 
-## Dependencies
-
-Install the native runtime from source, then this checkpoint.
-
-```text
-python -m pip install -e ".[test]"
-# or the pin list in this repo:
-python -m pip install -r requirements.txt
-```
-
-Required:
-
-```text
-python >= 3.11
-numpy >= 2.0
-pyyaml >= 6.0
-pydantic >= 2.0
-torch >= 2.3
-```
-
-Load is native PyTorch + MINAKANUSHI. There is no `transformers.AutoModel`. Constructing `minakanushi_6_8b` on CPU or a 96 GB 6000-class card is forbidden for training; inference later may fit on 6000 BW / H100 with bf16 weights (~13.6 GB) plus world/activation headroom.
+## Load
 
 ```python
-from pathlib import Path
 from minakanushi.architecture.config import load_architecture
 from minakanushi.architecture.model import MinakanushiSystem
 from minakanushi.training.checkpoint import load_mina
 
-arch = load_architecture("architecture.yaml")
+arch = load_architecture("configs/architecture/minakanushi_6_8b.yaml")
 system = MinakanushiSystem(arch)  # GPU-class machine
-manifest = load_mina("checkpoints/minakanushi_stage0_step64.mina", system)
+manifest = load_mina("minakanushi_stage0_step128.mina", system)
 ```
 
-Continue training (H200 / B300, not a laptop):
+Resume (B300 / 2× H200, not a laptop):
 
 ```text
 torchrun --nproc_per_node=1 scripts/train.py \
-  --config configs/training/mina_6_8b_status_core_researched.yaml \
-  --out experiments/mina_6_8b_status_core_researched
-```
-
-`--resume` from `*.mina` is still a follow-up in `scripts/train.py`. Checkpoint load/save already exist.
-
----
-
-## Further training checklist
-
-Do **not** replace MINAKANUSHI with another foundation model. Scale this runtime.
-
-### Immediate (next H200 / B300 budget)
-
-- [x] Wire `JsonEpisodeDataset` so `Trainer.unroll()` consumes `dataset/mina_6_8b` JSON, not only procedural `generate_episode(...)`.
-- [x] Add `scripts/train.py --resume path/to/*.mina` (optimizer + runtime cursor + epoch index).
-- [ ] Expand curriculum past n=8 / 2-per-phase. Current Grok pack is valid but thin (8 episodes, 2 corrections, no constant-velocity collapse).
-- [ ] Re-enable activation checkpointing only after FSDP2 recompute metadata is proven; Status Core ran with `activation_checkpoint: false`.
-- [ ] Keep `checkpoint_every == steps` or uncompressed `ZIP_STORED` — deflate stalls 6.8B saves.
-- [ ] Train next named segment from this Status Core weights, not from scratch, once resume is wired.
-- [ ] Target topology for long runs: **2× H200** or **1× B300**. Do not train 6.8B on 1× H100 80 GB.
-
-### Curriculum gates (physical episodes, not tokens)
-
-- [ ] Stage 1 — observation → belief (existence + xy, persistence)
-- [ ] Stage 2 — `S_t → S_{t+1}` (temporal + future ADE/FDE)
-- [ ] Stage 3 — delayed / occluded / `gone_forever` (`memory_effect_delta ≠ 0`)
-- [ ] Stage 4 — noise, conflict, OOD combos (calibration, not collapse)
-- [ ] Stage 5 — multi-future + strategy (counterfactual separation, WAIT ≠ OBSERVE ≠ MOVE_TO)
-- [ ] Stage 6 — hard constraints adversarial (kernel cannot be bought by value)
-- [ ] Stage 7 — closed-loop sim (`ActionIntent` changes the next observation)
-- [ ] Stage 8 — humanoid **sim** adapter (170–180 cm SelfModel; still no PWM)
-- [ ] Stage 9 — Yunmu review package (docs + checkpoint + limits)
-
-### Must-hold signals
-
-```text
-constraint_violation_count == 0
-entity persistence / reacquisition stay high
-false_revision_rate stays low
-uncertainty calibration improves
-future ADE/FDE trend down on held-out episodes
-hard constraints beat higher-value illegal strategies
-```
-
-If 6.8B is flatter than the 6.2M instrument on these, stop scaling and inspect data. Do not add layers, slots, or an LLM.
-
-Forbidden until architecture revision:
-
-```text
-token datasets as the cognitive objective
-FP16
-construct 6.8B on CPU / RTX PRO 6000 for training
-new learned identity head / chat template
-replacing NPF / DWC with another model family
+  --config configs/training/mina_6_8b_v02.yaml \
+  --out experiments/mina_6_8b_v02 \
+  --resume minakanushi_stage0_step128.mina
 ```
 
 ---
 
-## Dataset provenance
+## Limits
 
-This drop trained on the procedural SyntheticWorld loop used by `scripts/train.py` (32 overfit episodes, sequence length 12). Direct JSON training was audited but **not** connected yet.
-
-Audited Grok/6.8B JSON pack (`dataset/mina_6_8b`):
-
-```text
-8 episodes · physics/agency/causality/embodiment × 2
-transition length 11 · missing keys: none
-events 109 · occlusions 5 · conflicts 8 · corrections 2
-constant-velocity collapse: false
-```
-
-Dataset contract: `docs/DATASET_V1.md` in the GitHub runtime repo.
-
----
-
-## Limits (honest)
-
-- Status `Researched`, not a finished product brain.
-- 64 steps on synthetic physics. Not humanoid locomotion. Not vision-foundation trained.
-- Branch diversity / coverage on this segment is still near zero.
-- Belief-revision accuracy on the logged eval slice is not yet a pass.
+- Status `Researched`. 64 + 64 synthetic steps. Not locomotion. Not vision-foundation trained.
 - Do not treat this checkpoint as a chat model.
-
----
 
 ## License
 
-NULLXES MINAKANUSHI Research License. Research use of this architecture and checkpoint. Redistribution as another model family, or as an LLM wrapper with this name, is not granted.
-
----
-
-## Attribution
+NULLXES MINAKANUSHI Research License. Research use. Redistribution as another model family, or as an LLM wrapper with this name, is not granted.
 
 ```text
 NULLXES                 organization / architecture owner
 MagistrTheOne           author, HF namespace, runtime repo
 MINAKANUSHI / MINA      architecture family / short name
-Yunmu / Warmcore        intended integration readers, not a replacement stack
 ```
 
 I WILL SURVIVE. NULLXES.

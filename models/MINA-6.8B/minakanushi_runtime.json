@@ -1,0 +1,12 @@
+{
+  "runtime": "load_mina",
+  "construct": "MinakanushiSystem",
+  "canonical_format": "mina",
+  "canonical_checkpoint": "minakanushi_stage0_step128.mina",
+  "public_mirror": "safetensors",
+  "action_output": "ActionIntent",
+  "pwm": false,
+  "transformers_auto_model": false,
+  "generation": false,
+  "chat_template": false
+}

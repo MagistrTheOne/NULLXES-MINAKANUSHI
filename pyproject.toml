@@ -18,7 +18,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8.0"]
+test = ["pytest>=8.0", "safetensors>=0.4"]
+hf = ["safetensors>=0.4", "huggingface_hub>=0.24"]
 
 [tool.setuptools.packages.find]
 where = [".", "models/MINA-V2-MM/src"]

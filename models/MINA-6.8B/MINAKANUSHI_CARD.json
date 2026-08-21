@@ -1,0 +1,13 @@
+{
+  "name": "NULLXES MINAKANUSHI 6.8B",
+  "type": "Autonomous World Intelligence",
+  "architecture": "MINAKANUSHI",
+  "organization": "NULLXES",
+  "short_name": "MINA",
+  "not_a_chat_model": true,
+  "not_a_language_model": true,
+  "outputs": "ActionIntent",
+  "hardware": "B300/H200 class",
+  "canonical_format": "mina",
+  "public_mirror": "safetensors"
+}

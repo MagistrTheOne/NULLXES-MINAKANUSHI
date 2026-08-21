@@ -92,3 +92,16 @@ See `docs/GATE_V02_ACCEPTANCE.md`.
 Can MINA: predict world, detect wrong belief, revise, remember, choose different future, respect authority.
 
 If not: do not add layers. Fix data and resume.
+
+## Hugging Face mirror (after Acceptance Gate)
+
+`.mina` stays canonical. Safetensors is a public mirror for Hub discovery, not a
+Transformers conversion. Do not mirror v0.1 step64.
+
+```text
+python scripts/export_hf.py \
+  --mina path/to/final.mina \
+  --out /workspace/hf_mirror_v02
+```
+
+See `docs/HF_SAFETENSORS_MIRROR.md`. Upload is a later step.

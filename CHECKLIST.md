@@ -19,7 +19,7 @@
 | Длинный train | **2× H200** или тот же **1× B300** | полный AdamW 6.8B | 1× H100 80GB train |
 | Infer / Yunmu dry-run | 6000 BW или 1× H100 80GB | веса bf16 ~13.6 GB + голова мира | не путать с train |
 
-HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B) · `minakanushi_stage0_step64.mina`
+HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B) · корень репы: `minakanushi_stage0_step64.mina` + `minakanushi_stage0_step128.mina`
 
 ## Бюджет B300 (MVP обученной машины)
 
@@ -95,6 +95,10 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
 
 - [ ] **4. Yunmu review** — пакет: IdentityBound + доки + лимиты  
   контроллер снаружи, ActionIntent внутрь, не PWM. **Не** открывать, пока п.3 не PASS.
+
+- [ ] **HF safetensors mirror** — после Acceptance Gate, не step64.  
+  `.mina` = канон. safetensors = витрина Hub.  
+  `python scripts/export_hf.py --mina final.mina --out hf_mirror`
 
 ---
 
