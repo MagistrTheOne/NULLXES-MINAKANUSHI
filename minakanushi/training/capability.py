@@ -164,6 +164,13 @@ def gate_c_causality(trainer: Trainer) -> dict[str, Any]:
     }
 
 
+def gate_c_is_honest(row: dict[str, Any]) -> bool:
+    detected = float(row["revision_detected"])
+    return bool(row["pass"]) == (detected > 0.0) and bool(row.get("capability_proven", row["pass"])) == (
+        detected > 0.0
+    )
+
+
 def gate_d_counterfactual(trainer: Trainer) -> dict[str, Any]:
     pkt = trainer.unroll(1, scenario="const_velocity", episode_index=0, seed=SEEN_SEED, length=12)
     distance = float(counterfactual_separation_score(pkt.pred_future[0, -1], pkt.alt_future[0, -1]).detach())
@@ -199,6 +206,12 @@ def gate_e_memory(trainer: Trainer, *, length: int = 32) -> dict[str, Any]:
         "length": int(length),
         "pass": helps,
     }
+
+
+def gate_e_is_honest(row: dict[str, Any]) -> bool:
+    on = float(row["memory_ade_on"])
+    off = float(row["memory_ade_off"])
+    return bool(row["pass"]) == (on < off)
 
 
 def gate_f_revision_honesty(trainer: Trainer) -> dict[str, Any]:

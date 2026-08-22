@@ -137,6 +137,15 @@ def test_capability_gates_on_cpu_dev(tmp_path: Path) -> None:
     assert e["pass"] == (e["memory_ade_on"] < e["memory_ade_off"])
     e32 = gate_e_memory(trainer, length=32)
     assert e32["pass"] == (e32["memory_ade_on"] < e32["memory_ade_off"])
+    from minakanushi.training.capability import gate_c_is_honest, gate_e_is_honest
+
+    assert gate_c_is_honest(c) is True
+    assert gate_e_is_honest(e) is True
+    lie = dict(c)
+    lie["pass"] = True
+    lie["revision_detected"] = 0.0
+    lie["capability_proven"] = True
+    assert gate_c_is_honest(lie) is False
     f = gate_f_revision_honesty(trainer)
     assert "never_revises_trap" in f
     g = gate_g_no_shortcut(trainer)

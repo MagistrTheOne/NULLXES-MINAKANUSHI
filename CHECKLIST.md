@@ -12,7 +12,8 @@
 
 | Роль | Железо | Что на ней | Что нельзя |
 |---|---|---|---|
-| Ноут / CPU | Windows CPU | тесты, v0.2 gate (`cpu_dev`), Identity Init (штамп zip), JSON-генератор, пакет V2 MM | конструировать 6.8B |
+| Ноут / CPU / RTX 2080 | Windows | тесты, JSON v0.3, CPU acceptance, freeze YAML | не качать 27GB `.mina`, не train 6.8B |
+| **v0.3.1 Phase 0–3** | **1× H200 SXM 141 GB** | download step128 с HF → lock → safetensors → 1000 steps STOP | не B300 для этого эксперимента, не 2080 |
 | Stage A (закрыт) | 1× RTX PRO 6000 BW 96 GB · pod `gn3eqwxuht23qs` · ~$2.09–2.40/ч | только `gpu_train_v01` 6.2M, Gate 03B n=1000 | train 6.8B |
 | Status Core / sanity | **1× H200 SXM 141 GB** · ~$4.59/ч + диск | 6.8B FSDP2 bf16, step64; запас если B300 ещё нет | не train на 6000 |
 | След. неделя (цель) | **1× B300 ~288 GB** | v0.2 resume + обучение на `dataset/mina_6_8b` | сырой HF video / Cosmos / LeRobot RGB |
@@ -118,7 +119,12 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
   `python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --dataset dataset/mina_6_8b_v03 --out artifacts/v031/baseline`  
   Phase 1 на H200: **1000 steps then STOP**. Смотреть loss / ADE/FDE / revision / memory_future_delta / counterfactual.  
   После: `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after artifacts/v031/after/capability_report.json`  
-  Ledger только из цифр (`n=`). Gate G = no shortcut. Не стартовать H200 без baseline pack + held-out + audit.
+  Ledger только из цифр (`n=`). Gate G = no shortcut.  
+  Перед H200 на ноуте: `python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout`  
+  `python scripts/check_freeze.py`  
+  На H200 после download: `python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina`  
+  `python scripts/export_safetensors.py --mina minakanushi_stage0_step128.mina --out MINAKANUSHI-6.8B`  
+  `python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B`
 
 ---
 

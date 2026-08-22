@@ -49,6 +49,27 @@ loss.
 
 Passport: `artifacts/v031/run_manifest.json`.
 
+First GPU for this cycle: **1× H200 SXM 141 GB** (same class as v0.1 step64). Download
+`minakanushi_stage0_step128.mina` from Hugging Face onto that pod. Do not raise B300
+just to hash a zip. RTX 2080 does not see the 27GB file.
+
+On the laptop, before the pod:
+
+```text
+python scripts/check_freeze.py
+python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout
+python scripts/register_hf_architecture.py
+```
+
+On H200 after `hf download`:
+
+```text
+python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --require-mina --out artifacts/v031/baseline
+python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina
+python scripts/export_safetensors.py --mina minakanushi_stage0_step128.mina --out MINAKANUSHI-6.8B
+python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B
+```
+
 If git is dirty, `git_status.json` must say whether **code** is dirty or only
 `dataset/` / `artifacts/`. Code must be unambiguous before H200.
 
