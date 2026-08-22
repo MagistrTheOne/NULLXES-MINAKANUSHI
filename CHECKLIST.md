@@ -2,7 +2,7 @@
 
 **Старт плана:** 21-08-2026  
 **Freeze:** `7aba976` · профиль `minakanushi_6_8b` (6 799 130 646)  
-**Не делать:** слои/DWC/MoE/language head · train 6.8B на CPU / RTX PRO 6000 / 1× H100 80GB
+**Не делать:** слои/DWC/MoE/language head · train 6.8B на CPU / RTX PRO 6000 / RTX 2080 / 1× H100 80GB
 
 Метрики ниже — из закрытых прогонов. Пустая ячейка = ещё не мерили на этом этапе.
 
@@ -13,29 +13,14 @@
 | Роль | Железо | Что на ней | Что нельзя |
 |---|---|---|---|
 | Ноут / CPU / RTX 2080 | Windows | тесты, JSON v0.3, CPU acceptance, freeze YAML | не качать 27GB `.mina`, не train 6.8B |
-| **v0.3.1 Phase 0–3** | **1× H200 SXM 141 GB** | download step128 с HF → lock → safetensors → 1000 steps STOP | не B300 для этого эксперимента, не 2080 |
-| Stage A (закрыт) | 1× RTX PRO 6000 BW 96 GB · pod `gn3eqwxuht23qs` · ~$2.09–2.40/ч | только `gpu_train_v01` 6.2M, Gate 03B n=1000 | train 6.8B |
-| Status Core / sanity | **1× H200 SXM 141 GB** · ~$4.59/ч + диск | 6.8B FSDP2 bf16, step64; запас если B300 ещё нет | не train на 6000 |
-| След. неделя (цель) | **1× B300 ~288 GB** | v0.2 resume + обучение на `dataset/mina_6_8b` | сырой HF video / Cosmos / LeRobot RGB |
-| Длинный train | **2× H200** или тот же **1× B300** | полный AdamW 6.8B | 1× H100 80GB train |
-| Infer / Yunmu dry-run | 6000 BW или 1× H100 80GB | веса bf16 ~13.6 GB + голова мира | не путать с train |
+| **Финальный этап v0.3.1** | **1× H200 SXM 141 GB** | download step128 с HF → lock → safetensors → 1000 steps STOP → compare | не B300 для этого эксперимента, не 2080 |
+| Stage A (закрыт) | 1× RTX PRO 6000 BW 96 GB | только `gpu_train_v01` 6.2M, Gate 03B n=1000 | train 6.8B |
+| Status Core v0.1 (закрыт) | 1× H200 SXM 141 GB | 6.8B FSDP2 bf16, step64 | не train на 6000 |
+| Status Core v0.2 (закрыт) | **1× B300 ~288 GB** | resume IdentityBound + JSON `dataset/mina_6_8b`, steps 65–128 | сырой HF video / Cosmos / LeRobot RGB |
+| Infer (не train) | 6000 BW или 1× H100 80GB | веса bf16 ~13.6 GB + голова мира | не путать с train 6.8B |
 
-HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B) · корень репы: `minakanushi_stage0_step64.mina` + `minakanushi_stage0_step128.mina`
-
-## Бюджет B300 (MVP обученной машины)
-
-Тариф: **$7.89 / GPU·ч**. Диск в сумму не входит (меняется). Степ-тайм 6.8B на B300 в репо **не замерян** (H200 step64 был, wall-clock в карточку не записали). Ниже — потолки, не обещание часов.
-
-| Конверт | GPU·ч | $ | Что внутри |
-|---|---:|---:|---|
-| Минимум | ~8 | **~$65** | подъём + один job `steps: 64` если шаг ~2–4 мин |
-| **MVP потолок (заложить)** | **~32** | **$250** | подъём + 64 шага + один рестарт/OOM + eval + 4–8 ч буфер |
-| Жёсткий стоп | ~50 | **$400** | второй сегмент 64 или шаг оказался ~8–10 мин |
-| Ошибка «забыл Stop» | 24 / сут | **$189 / сут** | неделя Running ≈ **$1320** — это не MVP |
-
-**Заложить на MVP: $250. Резать под $400. Не держать Running без job.**
-
-CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только resume с `dataset_root`.
+HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B)  
+Корень Hub: `minakanushi_stage0_step64.mina` + `minakanushi_stage0_step128.mina`
 
 ---
 
@@ -66,75 +51,121 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
 
 ---
 
-## С 21-08-2026 — Status Core v0.2 (pipeline + data)
+## Закрыто с 21-08-2026 — Status Core v0.2
 
-Порядок жёсткий. Провал гейта → чинить данные/resume, **не** добавлять слои.
+Пункты 0–2 с чеклиста 21-го **закрыты**. Провал гейта → чинить данные/resume, **не** добавлять слои.
 
-- [ ] **0. Identity Initialization** — CPU (без construct 6.8B)  
-  `step64.mina` → штамп паспорта → `MINA-6.8B-IdentityBound.mina`  
-  *не train, нет `identity_loss`.*  
-  `python scripts/identity_init.py --checkpoint … --out …/MINA-6.8B-IdentityBound.mina`
+- [x] **0. Identity Initialization** — CPU, без construct 6.8B  
+  `step64.mina` → штамп паспорта → IdentityBound. Нет `identity_loss`.  
+  `python scripts/identity_init.py`
 
-- [ ] **1. JSON curriculum 1000 + фильтр** — CPU  
+- [x] **1. JSON curriculum 1000 + фильтр** — CPU  
   SOURCE OF TRUTH: `dataset/mina_6_8b` (наш генератор, не Hub dump).  
-  `--n 250` × 4 фазы (physics → agency → causality → embodiment), off git.  
-  Фильтр качества: `scripts/audit_curriculum.py` — ключи 6.8B, `pwm=false`, фазы, transitions.  
-  Фильтр источника: в лосс только native JSON; Minari/D4RL/Open-X — **adapter** в Observation/ActionIntent, не raw.  
-  Отвергнуть: NVIDIA PhysicalAI / Cosmos video, LeRobot RGB (pixels = Gate 9+, не v0.2).  
-  `python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b --n 250`  
-  `python scripts/audit_curriculum.py`
+  `--n 250` × 4 фазы (physics → agency → causality → embodiment).  
+  Audit: ключи 6.8B, `pwm=false`. Minari/D4RL/Open-X — adapter, не raw.  
+  Отвергнуто: NVIDIA PhysicalAI / Cosmos video, LeRobot RGB (pixels = не этот цикл).
 
-- [ ] **2. Resume v0.2** — **1× B300** (след. неделя; иначе 1× H200)  
-  тот же модель: optimizer + RNG + cursor + scheduler + identity, не clone  
-  `dataset_root: dataset/mina_6_8b` в `mina_6_8b_v02.yaml`  
-  `torchrun … scripts/train.py --config configs/training/mina_6_8b_v02.yaml --resume IdentityBound.mina`
+- [x] **2. Resume v0.2** — **1× B300** · git `ede6bda`  
+  тот же модель: optimizer + RNG + cursor + scheduler + identity, не clone.  
+  `dataset/mina_6_8b` в лоссе. steps **65–128**.  
+  Артефакт: `minakanushi_stage0_step128.mina` на HF.
 
-- [ ] **3. Acceptance Gate** — сначала CPU `cpu_dev`  
-  `python scripts/gate_v02_acceptance.py`  
-  предсказать · поймать ложный belief · revise · remember (`memory_future_delta`) · другой future · authority  
-  метрики ядра: ADE/FDE/uncertainty · revision_accuracy/latency/false_revision · memory_future_delta · future_diversity · counterfactual_quality
+  | метрика | значение | кратко |
+  |---|---|---|
+  | loss | 41.10 | лог, не гейт |
+  | step time (steady) | fwd ~1.42 s · bwd ~0.58 s | B300 |
+  | future ADE / FDE | 2.05 / 0.68 | лучше v0.1, не PASS интеллекта |
+  | world position error | 0.55 | |
+  | uncertainty calibration | 0.19 | |
+  | persistence / reacquisition | **1.0 / 1.0** | |
+  | constraint_violation_count | **0** | |
+  | closed_loop_success_rate | **1.0** | |
+  | false_revision_rate | **0.0** | |
+  | revision_accuracy | **0.0** | не PASS |
+  | branch_coverage | **0.0** | не PASS |
 
-- [ ] **4. Yunmu review** — пакет: IdentityBound + доки + лимиты  
-  контроллер снаружи, ActionIntent внутрь, не PWM. **Не** открывать, пока п.3 не PASS.
+  Loss на mixed JSON — не архитектурный гейт. Revision/branch — ещё не победа. Слои не трогать.
 
-- [ ] **HF safetensors mirror** — после Acceptance Gate, не step64.  
-  `.mina` = канон. safetensors = витрина Hub.  
-  `python scripts/export_safetensors.py --mina final.mina --out hf_mirror`
+- [x] **Контур v0.3.1 (код, не H200 job)** — freeze YAML, resume-аудит, sampler, hidden-correction 1–3, cpu_dev memory ADE, safetensors roundtrip, capability ledger с честными C/E, `lock_v031_baseline.py`, `check_freeze.py`, `gate_v031_acceptance.py`.  
+  Ledger-баги закрыты: Gate C больше не зелёный от имени события; Gate E больше не зелёный от «вектор есть».  
+  `python scripts/check_freeze.py` на ноуте: **PASS** (latent 4096 / depth 32 / 6 799 130 646). 6.8B не строится.
 
-- [ ] **Curriculum v0.3** — `dataset/mina_6_8b_v03` · 32/64 кадров · correction density · future forks  
-  `python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 250`  
-  `python scripts/split_heldout.py --root dataset/mina_6_8b_v03`  
-  `python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03 --gate`  
-  H200 resume только после этого гейта.
+Снято с этого цикла (не гейт, не блокер H200):
 
-- [ ] **Optimization Pass v0.3.1** — контур, не сеть. `docs/MINA_OPTIMIZATION_V031.md`  
-  `python scripts/freeze_step128.py --mina minakanushi_stage0_step128.mina --out artifacts/v031/step128`  
-  `python scripts/audit_resume.py --mina minakanushi_stage0_step128.mina`  
-  `python scripts/gate_v031_export.py --mina probe.mina --out artifacts/v031/hf_probe`  
-  `python scripts/gate_v031_validate.py --root dataset/mina_6_8b_v03 --n 100`  
-  `python scripts/gate_v031_loss_probe.py --steps 32`  
-  `python scripts/gate_capability.py --out artifacts/v031/capability`
-
-- [ ] **Pre-Training Lock v0.3.1** — чистый эксперимент, не «умнее». `docs/MINA_TRAINING_CONTRACT_v03.md`  
-  `python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --dataset dataset/mina_6_8b_v03 --out artifacts/v031/baseline`  
-  Phase 1 на H200: **1000 steps then STOP**. Смотреть loss / ADE/FDE / revision / memory_future_delta / counterfactual.  
-  После: `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after artifacts/v031/after/capability_report.json`  
-  Ledger только из цифр (`n=`). Gate G = no shortcut.  
-  Перед H200 на ноуте: `python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout`  
-  `python scripts/check_freeze.py`  
-  На H200 после download: `python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina`  
-  `python scripts/export_safetensors.py --mina minakanushi_stage0_step128.mina --out MINAKANUSHI-6.8B`  
-  `python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B`
+- ~~Acceptance Gate v0.2 как дверь наружу~~ — живой контракт: `scripts/gate_v031_acceptance.py` (FAIL = FAIL).
+- ~~Yunmu review / dry-run / humanoid package~~ — не этап MINA. Контроллер снаружи, если когда-нибудь понадобится, не из этого чеклиста.
+- ~~HF safetensors «после Acceptance Gate»~~ — перенесено в финальный этап на H200 (step128, не step64).
 
 ---
 
-## Позже (не смешивать с 1.0)
+## Финальный этап — v0.3.1 на 1× H200
 
-- [ ] **Длинный 6.8B** — тот же **1× B300** (или 2× H200) · тот же freeze · тот же `mina_6_8b` JSON
-- [ ] **Gate 9+ perception** — pixels → MinaUnit
-- [ ] **MINA V2 MM** — эксперимент уже в `models/MINA-V2-MM/` + `docs/experiments/MINA_V2_MULTIMODAL.md`  
-  органы → MinaUnit, не VLA/Cosmos; **не исполнять как train**, пока Yunmu/Gate 9+ не закрыты
-- [ ] **MINA 3.0** — одно cognition, разные тела (humanoid / UAV / vehicle)
+Один эксперимент. Не «крутим модельку». Не B300. Не 2080.
+
+Контракт: `docs/MINA_TRAINING_CONTRACT_v03.md`  
+Конфиг: `configs/training/mina_6_8b_v03.yaml` (`steps: 1000`, `eval_every: 50`, `checkpoint_every: 250`, `dataset_split: train`)
+
+```text
+сервер со step128 (HF → H200)
+        ↓
+lock baseline
+        ↓
+export safetensors + HF reload
+        ↓
+CPU gate (честность C/E)
+        ↓
+check_freeze --checkpoint
+        ↓
+H200 1000 steps STOP
+        ↓
+compare ledger
+        ↓
+вердикт A / B / C
+```
+
+### Ещё открыто (только это)
+
+- [ ] **Phase 0. Lock baseline** — на H200, после `hf download`  
+  `python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --require-mina --out artifacts/v031/baseline`  
+  `python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina`  
+  Точка невозврата: `checkpoint.sha256` + metrics + capability_before + dataset_report + training_config + hardware + git_commit.
+
+- [ ] **Phase 1. Safetensors** — там же, не локально  
+  `python scripts/export_safetensors.py --mina minakanushi_stage0_step128.mina --out MINAKANUSHI-6.8B`  
+  `python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B`  
+  Гейт: load tensor · shape match · **6799130646** · AutoModel type tag · **AutoModelForCausalLM absent**.
+
+- [ ] **Phase 2. CPU contract** — не обучение  
+  На ноуте/2080 (датасет), не 6.8B:  
+  `python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout`  
+  Ожидание до H200: C/E **честно FAIL** (`revision_detected = 0`, ADE memory on ≮ off). Это baseline, не сломанный скрипт.
+
+- [ ] **Phase 3. H200 1000 steps STOP**  
+  ```text
+  torchrun --nproc_per_node=1 scripts/train.py \
+    --config configs/training/mina_6_8b_v03.yaml \
+    --resume minakanushi_stage0_step128.mina \
+    --out experiments/mina_v031_h200
+  ```  
+  Смотреть каждые 50: `revision_detected` · `false_revision` · ADE(memory on) < ADE(memory off) · `std(distance)` · **heldout ADE**.  
+  Не смотреть `loss ↓` как победу. После 1000 — стоп, даже если хочется ещё 5000.
+
+- [ ] **Compare ledger**  
+  `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after experiments/mina_v031_h200/capability_after.json`
+
+### Вердикт (после compare, не раньше)
+
+| | Что видим | Что делать |
+|---|---|---|
+| **A** | revision ↑ · memory ADE on < off · heldout ADE ↓ · false_revision ≈ 0 | v0.3.1 PASS → следующий цикл: geometry / long horizon |
+| **B** | loss ↓ · train ADE ↓ · heldout = · memory = · revision = | подгонка. Менять sampler/curriculum/scenarios. **Не архитектуру.** |
+| **C** | revision ломается · false_revision растёт | чинить causality в данных/лоссе. **Не слои.** |
+
+---
+
+## Не этот цикл
+
+Длинный 6.8B, pixels → MinaUnit, органы, другие тела — **после** вердикта A/B/C. Не смешивать с Phase 0–3. Не открывать параллельный train.
 
 ---
 
@@ -144,5 +175,8 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
 не менять latent_dim / core_depth / world_slots / memory_slots
 не подменять DWC, не language head, не identity_loss
 не train authority как neural objective
+не AutoModelForCausalLM
 6000 BW ≠ машина 6.8B train
+RTX 2080 ≠ машина для 27GB .mina
+ActionIntent ≠ PWM
 ```
