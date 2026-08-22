@@ -165,7 +165,8 @@ H200
 
 - [x] CPU forensic: delay = timestamp; train frame = `length//2` без mover; one-step и delay-path < `0.25`; empty teacher → detected=0
 - [x] H200 live n=13 `sensor_delay`: оба чекпоинта `n_mover=0` frame 32; max_before_d **2.85 → 0.11**; n_need **1 → 0**; detect **1.00 → 0.00**. `hypothesis_holds=true`
-- [ ] локальный патч teacher/кадра/метрики. **Не общий train. Не v0.4.**
+- [x] локальный патч семантики (без весов): frame 2 · empty teacher ≠ miss · delay teacher = mover. **Не accepted. Не v0.4. Не train.**
+- [ ] H200 `live_after_patch` + heldout-100 `verdict_revision_fixed` на тех же `step1128.mina`
 
 ## Не этот цикл
 

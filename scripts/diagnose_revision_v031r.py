@@ -26,7 +26,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from minakanushi.training.revision_forensic import diagnose, live_slot_audit
-from minakanushi.training.v031_verdict import write_report
+from minakanushi.training.v031_verdict import _jsonable, write_report
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -72,12 +72,13 @@ def _live_one(mina: Path, *, config: Path, dataset: Path) -> dict:
             f"sensor_delay {len(rows)} {mina.name} cut={row['cut']} "
             f"n_mover={row['n_mover_evidence']} n_need={row['n_need']} "
             f"max_before_d={row['max_before_d']:.4f} moved={row['mean_moved']:.4f} "
-            f"detected={row['revision_detected']:.2f}",
+            f"detected={row['revision_detected']}",
             flush=True,
         )
     n = len(rows) or 1
     suppressed = sum(1 for r in rows if r["cut"] == "teacher_suppressed")
     no_mover = sum(1 for r in rows if r["cut"] == "no_mover_evidence")
+    scored = [r["revision_detected"] for r in rows if r["revision_detected"] == r["revision_detected"]]
     summary = {
         "checkpoint": str(mina),
         "n": len(rows),
@@ -86,7 +87,7 @@ def _live_one(mina: Path, *, config: Path, dataset: Path) -> dict:
         "mean_max_before_d": sum(r["max_before_d"] for r in rows) / n if rows else float("nan"),
         "mean_n_mover_evidence": sum(r["n_mover_evidence"] for r in rows) / n if rows else float("nan"),
         "mean_n_need": sum(r["n_need"] for r in rows) / n if rows else float("nan"),
-        "mean_detected": sum(r["revision_detected"] for r in rows) / n if rows else float("nan"),
+        "mean_detected": sum(scored) / len(scored) if scored else float("nan"),
         "mean_constructor_corrections": sum(r["n_constructor_corrections"] for r in rows) / n if rows else float("nan"),
         "rows": rows,
     }
@@ -134,12 +135,14 @@ def main() -> None:
             ),
         }
     write_report(args.out, report)
-    print(json.dumps({k: report[k] for k in report if k not in {"heldout_geometry", "generated"}}, indent=2, sort_keys=True))
+    printable = {k: report[k] for k in report if k not in {"heldout_geometry", "generated", "live_before", "live_after"}}
+    print(json.dumps(_jsonable(printable), indent=2, sort_keys=True))
     cpu = report["cpu_verdict"]
     print(
-        f"v0.3.1-R CPU: no_mover={cpu['train_frame_has_no_mover']} "
-        f"timestamp_only={cpu['delay_is_timestamp_only']} "
-        f"oracle_prev_teacher_dead={cpu['oracle_prev_teacher_dead']}"
+        f"v0.3.1-R CPU patch_pass={cpu['cpu_patch_pass']} "
+        f"frame={cpu['sensor_delay_frame']} "
+        f"mover={cpu['mover_evidence_at_train_frame']} "
+        f"empty_not_miss={cpu['empty_teacher_not_missed_detection']}"
     )
     if report.get("live_compare"):
         print(f"v0.3.1-R live hypothesis_holds={report['live_compare']['hypothesis_holds']}")

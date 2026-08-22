@@ -35,6 +35,9 @@ def test_training_frame_is_the_correction_event() -> None:
     assert training_frame("const_velocity", 12) == 6
     assert training_frame("hidden_correction", 64) == 34
     assert training_frame("conflict", 32) > 4
+    assert training_frame("sensor_delay", 64) == 2
+    assert training_frame("sensor_delay", 32) == 2
+    assert training_frame("sensor_delay", 12) == 2
 
 
 def test_reacquisition_is_hidden_correction_physics() -> None:

@@ -66,6 +66,11 @@ CORRECTION_FRAME: dict[str, int] = {
     "gone_forever": 3,
 }
 
+# Curriculum stamps delay corrections at frame 2. Do not scale with length:
+# the mover leaves sensor range in a few steps, so length//2 has no mover.
+DELAY_EVIDENCE_SCENARIOS = frozenset({"sensor_delay", "delayed", "motor_delay"})
+DELAY_EVIDENCE_FRAME = 2
+
 PHYSICS_ALIAS: dict[str, str] = {
     "reacquisition": "hidden_correction",
     "hidden_object": "hidden_correction",
@@ -90,9 +95,13 @@ def revision_frame(scenario: str, length: int) -> int:
 
     At length<=12 keep the original indices so Gate 03 tests stay bitwise.
     At 32/64 scale so the chain is observe → error → evidence → revision → new future.
+    Delay scenarios stay on the mover-visible curriculum frame. They must not
+    inherit length//2 (that samples leftover obstacle residual).
     """
     if length < 2:
         raise ValueError("episode too short to train a transition")
+    if str(scenario) in DELAY_EVIDENCE_SCENARIOS:
+        return int(max(0, min(DELAY_EVIDENCE_FRAME, length - 2)))
     named = CORRECTION_FRAME.get(scenario)
     if named is None:
         idx = max(1, min(length // 2, length - 2))

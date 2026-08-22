@@ -12,12 +12,14 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from minakanushi.architecture.mina_unit import MinaUnitBatch
+from minakanushi.architecture.mina_unit import KIND_IDS, MinaUnitBatch
 from minakanushi.state.correction import REVISION_MAGNITUDE
 from minakanushi.state.world import WorldState
+from simulations.synthetic_world.dataset import DELAY_EVIDENCE_SCENARIOS
 
 AGENT_ENTITY_ID = 1
 MOVE_DETECT = 0.05
+NOT_APPLICABLE = float("nan")
 
 
 def evidence_for_slots(world: WorldState, units: MinaUnitBatch) -> tuple[Tensor, Tensor, Tensor]:
@@ -56,11 +58,22 @@ def should_revise_mask(
     occupied_before: Tensor,
     entity_id: Tensor,
     magnitude: float = REVISION_MAGNITUDE,
+    entity_kind: Tensor | None = None,
+    scenario: str | None = None,
 ) -> Tensor:
-    """True where an existing non-self hypothesis disagrees with evidence."""
+    """True where an existing non-self hypothesis disagrees with evidence.
+
+    Delay scenarios may only target mover evidence. A leftover obstacle
+    residual is not a delay-revision teacher. Magnitude stays 0.25.
+    """
     delta = torch.linalg.vector_norm(before_xy - evidence_xy, dim=-1)
     not_self = entity_id != AGENT_ENTITY_ID
-    return has_evidence & occupied_before & not_self & (delta >= magnitude)
+    mask = has_evidence & occupied_before & not_self & (delta >= magnitude)
+    if scenario is not None and str(scenario) in DELAY_EVIDENCE_SCENARIOS:
+        if entity_kind is None:
+            raise ValueError("delay teacher requires entity_kind so leftover obstacles cannot fire")
+        mask = mask & (entity_kind == KIND_IDS["mover"])
+    return mask
 
 
 def revision_losses(
@@ -117,25 +130,32 @@ def revision_metrics(
     moved = torch.linalg.vector_norm(after_xy - before_xy, dim=-1)
     toward = after_d < before_d
     n_need = int(should_revise.sum().item())
+    n_detected = int((should_revise & (moved > MOVE_DETECT)).sum().item())
+    not_self = entity_id != AGENT_ENTITY_ID
+    stable = has_evidence & occupied_before & ~should_revise & not_self
+    n_no_need = int(stable.sum().item())
+    n_false = int((stable & (moved > REVISION_MAGNITUDE)).sum().item())
     if n_need == 0:
-        detected = 0.0
-        direction = 0.0
-        mag_err = 0.0
+        detected = NOT_APPLICABLE
+        direction = NOT_APPLICABLE
+        mag_err = NOT_APPLICABLE
         latency = -1.0
     else:
-        detected = float((should_revise & (moved > MOVE_DETECT)).sum().item() / n_need)
+        detected = float(n_detected / n_need)
         direction = float((should_revise & toward).sum().item() / n_need)
         mag_err = float(after_d[should_revise].mean().item())
         latency = 0.0 if direction > 0.0 else -1.0
-    not_self = entity_id != AGENT_ENTITY_ID
-    stable = has_evidence & occupied_before & ~should_revise & not_self
-    n_stable = int(stable.sum().item())
-    false_rate = float((stable & (moved > REVISION_MAGNITUDE)).sum().item() / n_stable) if n_stable else 0.0
+    false_rate = float(n_false / n_no_need) if n_no_need else 0.0
     return {
         "revision_detected": detected,
+        "revision_required_recall": detected,
         "revision_direction_accuracy": direction,
         "revision_magnitude_error": mag_err,
         "revision_latency": latency,
         "false_revision_rate": false_rate,
         "belief_revision_accuracy": direction,
+        "n_need": float(n_need),
+        "n_detected": float(n_detected),
+        "n_no_need": float(n_no_need),
+        "n_false_revision": float(n_false),
     }

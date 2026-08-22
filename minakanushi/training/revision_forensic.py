@@ -1,16 +1,13 @@
-"""v0.3.1-R: where sensor_delay revision is cut.
+"""v0.3.1-R: sensor_delay revision cut and post-patch CPU forensic.
 
 Does not train. Does not construct 6.8B.
 Does not change REVISION_MAGNITUDE / MOVE_DETECT.
-
-Teacher is geometric: |belief − evidence| >= 0.25 on a non-self slot.
-Detection is empty-teacher collapse: n_need==0 → revision_detected==0.0.
-sensor_delay stamps arrival_time; observe() still emits current xy.
 """
 
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +16,12 @@ import torch
 
 from minakanushi.architecture.mina_unit import KIND_IDS
 from minakanushi.state.correction import REVISION_MAGNITUDE
-from minakanushi.training.revision import AGENT_ENTITY_ID, MOVE_DETECT, revision_metrics, should_revise_mask
+from minakanushi.training.revision import (
+    AGENT_ENTITY_ID,
+    MOVE_DETECT,
+    revision_metrics,
+    should_revise_mask,
+)
 from simulations.synthetic_world.dataset import training_frame
 
 SENSOR_DELAY_S = 0.15
@@ -157,8 +159,8 @@ def spatial_disagreement(episode) -> dict[str, Any]:
     }
 
 
-def metric_collapses_when_teacher_empty() -> dict[str, Any]:
-    """Identity of revision_metrics: n_need==0 reports detected=0.0."""
+def metric_empty_teacher_is_not_a_miss() -> dict[str, Any]:
+    """n_need==0 is excluded from the detection denominator."""
     before = torch.zeros(1, 2, 2)
     evidence = torch.zeros(1, 2, 2)
     after = torch.zeros(1, 2, 2)
@@ -175,11 +177,16 @@ def metric_collapses_when_teacher_empty() -> dict[str, Any]:
         occupied_before=occ,
         entity_id=ids,
     )
+    detected = float(metrics["revision_detected"])
     return {
-        "n_need": int(should.sum().item()),
-        "revision_detected": float(metrics["revision_detected"]),
-        "collapses_to_zero": int(should.sum().item()) == 0 and metrics["revision_detected"] == 0.0,
-        "claim": "empty teacher is scored as missed detection, not as 'no revision needed'.",
+        "n_need": int(metrics["n_need"]),
+        "n_detected": int(metrics["n_detected"]),
+        "n_no_need": int(metrics["n_no_need"]),
+        "n_false_revision": int(metrics["n_false_revision"]),
+        "revision_detected": detected,
+        "excluded_from_detection": int(should.sum().item()) == 0 and math.isnan(detected),
+        "false_revision_rate": float(metrics["false_revision_rate"]),
+        "claim": "empty teacher is not a missed revision. Only false_revision is scored.",
     }
 
 
@@ -195,7 +202,7 @@ def classify_cut(
         return "no_mover_evidence"
     if int(n_need) == 0 and float(max_before_d) < float(magnitude):
         return "teacher_suppressed"
-    if int(n_need) > 0 and float(detected) <= 0.0:
+    if int(n_need) > 0 and not math.isnan(float(detected)) and float(detected) <= 0.0:
         return "model_did_not_move"
     if int(n_need) > 0 and float(detected) > 0.0:
         return "trigger_live"
@@ -260,8 +267,13 @@ def live_slot_audit(pkt) -> dict[str, Any]:
         "mean_conflict": conflict,
         "n_constructor_corrections": int(pkt.n_constructor_corrections),
         "revision_detected": float(metrics["revision_detected"]),
+        "revision_required_recall": float(metrics["revision_required_recall"]),
         "revision_direction_accuracy": float(metrics["revision_direction_accuracy"]),
         "false_revision_rate": float(metrics["false_revision_rate"]),
+        "n_need_slots": int(metrics["n_need"]),
+        "n_detected": int(metrics["n_detected"]),
+        "n_no_need": int(metrics["n_no_need"]),
+        "n_false_revision": int(metrics["n_false_revision"]),
         "cut": cut,
         "teacher_below_threshold": n_need == 0 and max_before < REVISION_MAGNITUDE,
         "better_prediction_suppresses_teacher": (
@@ -284,12 +296,17 @@ def compare_sensor_delay_verdicts(before: Path, after: Path) -> dict[str, Any]:
         if not group:
             return {"n": 0}
         ade = [float(r["future_ADE"]) for r in group]
-        det = [float(r["revision_detected"]) for r in group]
+        det = [
+            float(r["revision_detected"])
+            for r in group
+            if not (isinstance(r.get("revision_detected"), float) and math.isnan(float(r["revision_detected"])))
+        ]
         return {
             "n": len(group),
             "ade_mean": sum(ade) / len(ade),
-            "detection_mean": sum(det) / len(det),
-            "detection_all_zero": all(v == 0.0 for v in det),
+            "detection_mean": sum(det) / len(det) if det else float("nan"),
+            "detection_n_scored": len(det),
+            "detection_all_zero": bool(det) and all(v == 0.0 for v in det),
         }
 
     b = _slice(_verdict_rows(before))
@@ -388,15 +405,13 @@ def diagnose(
         "trains": False,
         "constructs_6_8b": False,
         "thresholds": thresholds(),
-        "metric_identity": metric_collapses_when_teacher_empty(),
+        "metric_identity": metric_empty_teacher_is_not_a_miss(),
         "generated": generated_sensor_delay_geometry(),
         "cut_points": [
-            "1. sensor_delay delay is arrival_time stamp, not a stale xy.",
-            "2. trainer unrolls length//2; the mover has already left sensor range.",
-            "3. should_revise ignores curriculum rows (frame 2); only |Δxy|>=0.25.",
-            "4. consecutive visibility is tracking, not hypothesis_revision.",
-            "5. revision_metrics scores n_need==0 as detected==0.",
-            "6. a better tracker on leftover static evidence kills the teacher.",
+            "A. sensor_delay trains/evals curriculum frame 2, not length//2.",
+            "B. n_need==0 is excluded from revision_required_recall.",
+            "C. delay teacher is mover-only; leftover obstacle residual is not a target.",
+            "D. REVISION_MAGNITUDE stays 0.25. Weights stay step1128.mina.",
         ],
     }
     if dataset is not None:
@@ -408,19 +423,22 @@ def diagnose(
     else:
         report["verdict_compare"] = {"status": "skipped", "reason": "need --before-verdict and --after-verdict"}
     gen = report["generated"]
+    ident = report["metric_identity"]
+    frames = [int(r["training_frame"]) for r in gen["rows"]]
     report["cpu_verdict"] = {
+        "sensor_delay_frame": frames[0] if frames else None,
+        "sensor_delay_frame_not_mid": all(idx != 32 and idx != length // 2 for idx, length in ((r["training_frame"], r["length"]) for r in gen["rows"])),
+        "mover_evidence_at_train_frame": gen["train_frame_no_mover_rate"] == 0.0,
+        "empty_teacher_not_missed_detection": bool(ident["excluded_from_detection"]),
         "delay_is_timestamp_only": gen["obs_is_current_xy_rate"] == 1.0,
-        "train_frame_has_no_mover": gen["train_frame_no_mover_rate"] == 1.0,
         "early_frame_has_mover": gen["early_mover_visible_rate"] == 1.0,
-        "oracle_prev_teacher_dead": gen["teacher_if_oracle_prev_rate"] == 0.0,
-        "early_oracle_prev_teacher_dead": gen["early_teacher_if_oracle_prev_rate"] == 0.0,
-        "one_step_below_threshold": gen["mean_step"] < REVISION_MAGNITUDE,
-        "delay_path_below_threshold": gen["mean_delay_path"] < REVISION_MAGNITUDE,
-        "next": (
-            "H200 live dump on sensor_delay: n_mover_evidence and max_before_d, "
-            "step128 vs step1128. Expect train frame n_mover_evidence=0. "
-            "If 1128 max_before_d < 0.25 on leftover static slots, the remaining "
-            "defect is teacher/frame calibration, not a missing Future Engine."
-        ),
+        "accepted": False,
+        "variant": "B",
+        "next": "CPU patch PASS → H200 live_after_patch on the same step1128.mina. Do not train.",
     }
+    report["cpu_verdict"]["cpu_patch_pass"] = bool(
+        report["cpu_verdict"]["sensor_delay_frame_not_mid"]
+        and report["cpu_verdict"]["mover_evidence_at_train_frame"]
+        and report["cpu_verdict"]["empty_teacher_not_missed_detection"]
+    )
     return report

@@ -15,6 +15,12 @@ def test_dense_system_state_leaves_ordinary_tensors() -> None:
     assert out["n"] == 1
 
 
+def test_summarize_skips_nan_detection() -> None:
+    stats = summarize([1.0, float("nan"), 0.0])
+    assert stats["n"] == 2.0
+    assert stats["mean"] == 0.5
+
+
 def test_summarize_mean_median_p90_worst10() -> None:
     stats = summarize([1.0, 2.0, 3.0, 4.0, 10.0])
     assert stats["n"] == 5

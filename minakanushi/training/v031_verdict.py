@@ -66,6 +66,7 @@ SCALAR_KEYS = (
     "future_FDE",
     "uncertainty_calibration_error",
     "revision_detected",
+    "revision_required_recall",
     "false_revision_rate",
     "revision_direction_accuracy",
 )
@@ -75,7 +76,9 @@ def summarize(values: list[float]) -> dict[str, float]:
     """mean / median / p90 / worst-10. Empty list is not a PASS."""
     if not values:
         return {"n": 0.0, "mean": float("nan"), "median": float("nan"), "p90": float("nan"), "worst10": float("nan")}
-    ordered = sorted(float(v) for v in values)
+    ordered = sorted(float(v) for v in values if not (isinstance(v, float) and math.isnan(v)))
+    if not ordered:
+        return {"n": 0.0, "mean": float("nan"), "median": float("nan"), "p90": float("nan"), "worst10": float("nan")}
     n = len(ordered)
     mid = n // 2
     median = ordered[mid] if n % 2 else 0.5 * (ordered[mid - 1] + ordered[mid])
@@ -177,7 +180,12 @@ def _row(trainer: Trainer, index: int, episode, phase: str) -> dict[str, Any]:
         "episode_index": int(episode.episode_index),
         "seed": int(getattr(episode, "seed", trainer.config.training.seed)),
         "split": "heldout",
+        "frame_index": int(pkt.frame_index),
         **{k: float(metrics[k]) for k in SCALAR_KEYS if k in metrics},
+        "n_need": float(metrics.get("revision_n_need", metrics.get("n_need", 0.0))),
+        "n_detected": float(metrics.get("revision_n_detected", metrics.get("n_detected", 0.0))),
+        "n_no_need": float(metrics.get("revision_n_no_need", metrics.get("n_no_need", 0.0))),
+        "n_false_revision": float(metrics.get("revision_n_false_revision", metrics.get("n_false_revision", 0.0))),
         "memory_ade_on": float(metrics["memory_ade_on"]),
         "memory_ade_off": float(metrics["memory_ade_off"]),
         "memory_fde_on": float(metrics["memory_fde_on"]),
@@ -230,7 +238,8 @@ def evaluate_heldout(trainer: Trainer, held: JsonEpisodeDataset, *, traces: int 
 
 
 def _mean(values: list[float]) -> float:
-    return sum(values) / len(values) if values else float("nan")
+    finite = [float(v) for v in values if not (isinstance(v, float) and math.isnan(v))]
+    return sum(finite) / len(finite) if finite else float("nan")
 
 
 def _aggregates(rows: list[dict[str, Any]]) -> dict[str, Any]:

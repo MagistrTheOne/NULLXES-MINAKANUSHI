@@ -27,11 +27,16 @@ class MetricBundle:
     false_persistence_steps: float = 0.0
     evidence_dominance: float = 0.0
     revision_detected: float = 0.0
+    revision_required_recall: float = 0.0
     revision_direction_accuracy: float = 0.0
     revision_magnitude_error: float = 0.0
     revision_latency: float = -1.0
     false_revision_rate: float = 0.0
     revision_accuracy: float = 0.0
+    revision_n_need: float = 0.0
+    revision_n_detected: float = 0.0
+    revision_n_no_need: float = 0.0
+    revision_n_false_revision: float = 0.0
     memory_future_delta: float = 0.0
     future_diversity: float = 0.0
     counterfactual_quality: float = 0.0
@@ -289,11 +294,16 @@ def assemble_bundle(
     cal = (cal * occupied.to(cal.dtype)).sum() / occupied.to(cal.dtype).sum().clamp_min(1.0)
     rev = {
         "revision_detected": 0.0,
+        "revision_required_recall": 0.0,
         "revision_direction_accuracy": 0.0,
         "revision_magnitude_error": 0.0,
         "revision_latency": -1.0,
         "false_revision_rate": 0.0,
         "belief_revision_accuracy": 0.0,
+        "n_need": 0.0,
+        "n_detected": 0.0,
+        "n_no_need": 0.0,
+        "n_false_revision": 0.0,
     }
     if (
         before_xy is not None
@@ -331,11 +341,16 @@ def assemble_bundle(
         belief_revision_accuracy=float(rev["belief_revision_accuracy"]),
         correction_latency=float(rev["revision_latency"]),
         revision_detected=float(rev["revision_detected"]),
+        revision_required_recall=float(rev.get("revision_required_recall", rev["revision_detected"])),
         revision_direction_accuracy=float(rev["revision_direction_accuracy"]),
         revision_magnitude_error=float(rev["revision_magnitude_error"]),
         revision_latency=float(rev["revision_latency"]),
         false_revision_rate=float(rev["false_revision_rate"]),
         revision_accuracy=float(rev["belief_revision_accuracy"]),
+        revision_n_need=float(rev.get("n_need", 0.0)),
+        revision_n_detected=float(rev.get("n_detected", 0.0)),
+        revision_n_no_need=float(rev.get("n_no_need", 0.0)),
+        revision_n_false_revision=float(rev.get("n_false_revision", 0.0)),
         memory_future_delta=float(memory_future_delta),
         future_diversity=float(future_diversity),
         counterfactual_quality=float(counterfactual_quality),

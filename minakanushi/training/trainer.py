@@ -339,7 +339,13 @@ class Trainer:
         packed = self._encode(obs, float(idx))
         evidence_xy, evidence_vel, has_evidence = evidence_for_slots(world, packed)
         should_revise = should_revise_mask(
-            before_xy, evidence_xy, has_evidence, occupied_before, world.entity_id
+            before_xy,
+            evidence_xy,
+            has_evidence,
+            occupied_before,
+            world.entity_id,
+            entity_kind=world.kind,
+            scenario=episode.scenario,
         )
         pos, hints, constructed, core = self._core_step(packed, world, live_writes=writes)
         writes = core.memory_write_candidates

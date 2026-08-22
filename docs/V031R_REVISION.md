@@ -72,12 +72,32 @@ Leftover evidence is one static slot. step128 residual ≈ 2.85 trips `REVISION_
 
 Constructor never wrote `CorrectionEvent`. This is not a swallowed correction inside DWC.
 
-## After the live dump — still no general train
+## Local patch (CPU) — eval semantics only
 
-Local patch only:
+Weights stay `step1128.mina`. `REVISION_MAGNITUDE` stays 0.25. No train. Not accepted. Not v0.4.
 
-1. `training_frame("sensor_delay")` must be a frame that still sees the mover (curriculum frame 2), not `length//2`.
-2. `revision_metrics`: empty teacher is not `detected=0`. Omit or mark not-applicable.
-3. Do not treat leftover obstacle residual as a delay-revision teacher.
+| | Before | After |
+|---|---|---|
+| A frame | `sensor_delay` → `length//2` (32 on heldout-64) | curriculum frame **2**, unscaled |
+| B metric | `n_need==0` → `detected=0` | `n_need==0` → recall **N/A**; only false_revision |
+| C teacher | any leftover residual ≥ 0.25 | delay teacher = **mover** only |
+| D other | — | hidden_correction / conflict frame and teacher unchanged |
 
-Not 1000 more steps. Not new layers. Not v0.4. Weights stay `step1128.mina`.
+Raw counts always emitted: `n_need`, `n_detected`, `n_no_need`, `n_false_revision`. Verdict `frame_index` is in every row.
+
+CPU PASS before H200:
+
+```text
+python scripts/diagnose_revision_v031r.py --out artifacts/v031r/cpu_after_patch.json
+```
+
+Need: `sensor_delay` frame ≠ 32, mover evidence at that frame, empty teacher not a miss.
+
+H200 tomorrow (same weights):
+
+```text
+python scripts/diagnose_revision_v031r.py ... --out artifacts/v031r/live_after_patch.json
+python scripts/gate_v031_h200_verdict.py ... --out artifacts/v031/verdict_revision_fixed
+```
+
+Do not require step1128 `detect=1` on every `sensor_delay`. Require correct recall / false-revision split.
