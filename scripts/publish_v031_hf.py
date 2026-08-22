@@ -162,10 +162,7 @@ def ensure_collection(api: HfApi, *, namespace: str) -> str:
     created = api.create_collection(
         title=COLLECTION_TITLE,
         namespace=namespace,
-        description=(
-            "NULLXES MINAKANUSHI — adaptive situational intelligence / world models. "
-            "Not language models. Canonical runtime is *.mina. Safetensors is a weight mirror."
-        ),
+        description="NULLXES MINAKANUSHI world models. Not LLMs. Canonical: *.mina.",
         private=False,
         exists_ok=True,
     )

@@ -22,6 +22,8 @@ CORE = (
     "memory_future_delta",
     "memory_ade_on",
     "memory_ade_off",
+    "memory_fde_on",
+    "memory_fde_off",
     "memory_helps_future",
     "future_diversity",
     "counterfactual_quality",

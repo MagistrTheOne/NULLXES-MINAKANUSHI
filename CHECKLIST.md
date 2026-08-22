@@ -135,10 +135,11 @@ H200
 
 ### Ещё открыто (только это)
 
-- [ ] **HF publish** — `step1128.mina` + safetensors + metrics на [MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B), карточка *research / not accepted*, коллекция ASI (WorldModel), датасеты на Hub
-- [ ] **Compare ledger** — после upload, не v0.4  
-  `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after experiments/mina_v031_h200/capability_after.json`  
-  Смотреть: heldout 100 · revision · false revision · direction · memory on/off ADE · WAIT vs MOVE_TO · action.
+- [x] **HF publish** — `step1128.mina` + safetensors + metrics на [MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B), карточка *research / not accepted*, коллекция [ASI (WorldModel)](https://huggingface.co/collections/MagistrTheOne/asi-worldmodel-6a89f942152bb18dd68c144b), датасет [mina-6.8b-v03](https://huggingface.co/datasets/MagistrTheOne/mina-6.8b-v03)
+- [ ] **Compare ledger** — H200, не ещё один train, не v0.4  
+  `python scripts/gate_v031_h200_verdict.py --before step128.mina --after step1128.mina --out artifacts/v031/verdict`  
+  Полные 100 heldout: mean/median/p90/worst-10 · фазы · memory ON/OFF ADE+FDE · WAIT vs MOVE_TO · revision slices · action trace.  
+  Train-eval hint не считается. Вердикт пишет `compare.json` (`A` / `B` / `C`).
 
 ### Вердикт (после compare, не раньше)
 

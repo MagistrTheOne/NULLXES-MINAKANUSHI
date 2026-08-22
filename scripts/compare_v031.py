@@ -24,6 +24,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--before", type=Path, required=True)
     parser.add_argument("--after", type=Path, required=True)
+    parser.add_argument("--verdict", type=Path, default=None, help="H200 artifacts/v031/verdict/compare.json")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
     before = json.loads(args.before.read_text(encoding="utf-8"))
@@ -37,11 +38,20 @@ def main() -> None:
         "not_a_claim": "train metrics up is not held-out up. hidden correction up with physics forgotten is not progress.",
         "do_not_compare": "step128 loss vs stepN loss",
     }
+    if args.verdict is not None:
+        h200 = json.loads(args.verdict.read_text(encoding="utf-8"))
+        report["h200_heldout100"] = h200
+        report["variant"] = h200.get("variant")
+        report["accepted"] = bool(h200.get("accepted"))
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(text + "\n", encoding="utf-8")
     print(text)
+    if args.verdict is not None:
+        if not report.get("accepted"):
+            raise SystemExit(f"v0.3.1 H200 verdict {report.get('variant')}")
+        return
     retention_pass = report["retention"].get("pass", False)
     heldout_pass = report["heldout"].get("pass", False)
     if not (retention_pass and heldout_pass):

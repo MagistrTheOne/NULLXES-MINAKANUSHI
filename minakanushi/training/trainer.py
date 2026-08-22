@@ -493,10 +493,12 @@ class Trainer:
         )
         primary_off = [t for t in trajs_off if t.strategy_id == pkt.candidates[0].strategy_id]
         pred_future_off = primary_off[0].states_xy.unsqueeze(0)
-        ade_on, _ = displacement_error(pkt.pred_future, pkt.true_future, pkt.aligned_occ)
-        ade_off, _ = displacement_error(pred_future_off, pkt.true_future, pkt.aligned_occ)
+        ade_on, fde_on = displacement_error(pkt.pred_future, pkt.true_future, pkt.aligned_occ)
+        ade_off, fde_off = displacement_error(pred_future_off, pkt.true_future, pkt.aligned_occ)
         memory_ade_on = float(ade_on.detach())
         memory_ade_off = float(ade_off.detach())
+        memory_fde_on = float(fde_on.detach())
+        memory_fde_off = float(fde_off.detach())
         memory_helps_future = 1.0 if memory_ade_on < memory_ade_off else 0.0
         primary = [t for t in pkt.trajs if t.strategy_id == pkt.candidates[0].strategy_id]
         branch_xy = torch.stack([t.states_xy for t in primary], dim=0)
@@ -549,6 +551,8 @@ class Trainer:
             counterfactual_quality=counterfactual,
             memory_ade_on=memory_ade_on,
             memory_ade_off=memory_ade_off,
+            memory_fde_on=memory_fde_on,
+            memory_fde_off=memory_fde_off,
             memory_helps_future=memory_helps_future,
         )
         return asdict(bundle)

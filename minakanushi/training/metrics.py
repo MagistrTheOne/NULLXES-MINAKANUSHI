@@ -37,6 +37,8 @@ class MetricBundle:
     counterfactual_quality: float = 0.0
     memory_ade_on: float = 0.0
     memory_ade_off: float = 0.0
+    memory_fde_on: float = 0.0
+    memory_fde_off: float = 0.0
     memory_helps_future: float = 0.0
 
 
@@ -220,6 +222,8 @@ def assemble_bundle(
     counterfactual_quality: float = 0.0,
     memory_ade_on: float = 0.0,
     memory_ade_off: float = 0.0,
+    memory_fde_on: float = 0.0,
+    memory_fde_off: float = 0.0,
     memory_helps_future: float = 0.0,
 ) -> MetricBundle:
     pos = masked_mse(pred_xy, true_xy, occupied)
@@ -283,6 +287,8 @@ def assemble_bundle(
         counterfactual_quality=float(counterfactual_quality),
         memory_ade_on=float(memory_ade_on),
         memory_ade_off=float(memory_ade_off),
+        memory_fde_on=float(memory_fde_on),
+        memory_fde_off=float(memory_fde_off),
         memory_helps_future=float(memory_helps_future),
     )
 
