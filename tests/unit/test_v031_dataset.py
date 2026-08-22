@@ -9,13 +9,16 @@ from types import SimpleNamespace
 
 import pytest
 
+from minakanushi.architecture.config import load_simulation
 from minakanushi.training.v031_dataset import (
     READY_NAME,
     DatasetContractError,
+    _length_failures,
     assert_v031_train_dataset,
     prepare_v031_dataset,
     verify_v031_dataset,
 )
+from simulations.synthetic_world.curriculum_6_8b import PHASE_LENGTHS, PHASE_ORDER, episode_record
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,6 +33,26 @@ def cpu_dev_pack(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def _clone(src: Path, dest: Path) -> Path:
     shutil.copytree(src, dest)
     return dest
+
+
+def test_v031_length_gate_uses_obs_minus_one_transitions() -> None:
+    """Curriculum writes length observations and length-1 transitions. cpu_dev skips this."""
+    config = load_simulation(ROOT / "configs" / "simulation" / "milestone1.yaml")
+    records = []
+    for phase in PHASE_ORDER:
+        rec = episode_record(config, phase=phase, seed=11, episode_index=0, length=PHASE_LENGTHS[phase])
+        want = PHASE_LENGTHS[phase]
+        assert len(rec["observations"]) == want
+        assert len(rec["transitions"]) == want - 1
+        records.append(rec)
+    assert _length_failures(records, profile="v031") == []
+    assert _length_failures(records, profile="cpu_dev") == []
+    equal_counts = [
+        dict(records[0], transitions=list(records[0]["observations"]))
+    ]
+    failed = _length_failures(equal_counts, profile="v031")
+    assert failed
+    assert "transitions" in failed[0]
 
 
 def test_v031_profile_refuses_small_n(tmp_path: Path) -> None:

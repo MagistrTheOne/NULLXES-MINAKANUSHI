@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,6 @@ from minakanushi.training.curriculum_audit import audit_curriculum
 from minakanushi.training.heldout import (
     HELD_OUT_MOD,
     HELD_OUT_REMAINDER,
-    identity_key,
     is_heldout_index,
     load_pack_index,
     parse_episode_id,
@@ -143,10 +143,10 @@ def _load_episodes(root: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _index_identities(path: Path) -> list[tuple[int, str, int]]:
-    keys: list[tuple[int, str, int]] = []
+def _index_rows(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     if not path.is_file():
-        return keys
+        return rows
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -155,10 +155,24 @@ def _index_identities(path: Path) -> list[tuple[int, str, int]]:
         scenario = str(rec.get("scenario") or "")
         seed = rec.get("seed")
         episode_index = rec.get("episode_index")
+        phase = str(rec.get("phase") or Path(str(rec.get("path") or "")).parent.name)
         if seed is None or episode_index is None or not scenario:
             scenario, seed, episode_index = parse_episode_id(episode_id)
-        keys.append(identity_key(int(seed), str(scenario), int(episode_index)))
-    return keys
+        rows.append(
+            {
+                "path": str(rec.get("path") or ""),
+                "phase": phase,
+                "scenario": str(scenario),
+                "seed": int(seed),
+                "episode_index": int(episode_index),
+            }
+        )
+    return rows
+
+
+def _pack_identity(row: dict[str, Any]) -> tuple[str, int, str, int]:
+    """Phase is part of identity. const_velocity in physics is not agency."""
+    return (str(row["phase"]), int(row["seed"]), str(row["scenario"]), int(row["episode_index"]))
 
 
 def _structure_failures(root: Path) -> list[str]:
@@ -174,27 +188,35 @@ def _structure_failures(root: Path) -> list[str]:
 
 def _split_failures(root: Path, *, profile: str) -> list[str]:
     failed: list[str] = []
-    train_keys = set(_index_identities(root / "train" / "index.jsonl"))
-    held_keys = set(_index_identities(root / "heldout" / "index.jsonl"))
+    train_rows = _index_rows(root / "train" / "index.jsonl")
+    held_rows = _index_rows(root / "heldout" / "index.jsonl")
+    train_keys = {_pack_identity(row) for row in train_rows}
+    held_keys = {_pack_identity(row) for row in held_rows}
     leak = train_keys & held_keys
     if leak:
         sample = sorted(leak)[:3]
         failed.append(f"train/heldout identity leak {sample}")
-    for seed, scenario, episode_index in held_keys:
-        if not is_heldout_index(episode_index):
+    if len(train_keys) != len(train_rows):
+        failed.append(f"train index has duplicate pack identities {len(train_rows)} rows / {len(train_keys)} ids")
+    if len(held_keys) != len(held_rows):
+        failed.append(f"heldout index has duplicate pack identities {len(held_rows)} rows / {len(held_keys)} ids")
+    for row in held_rows:
+        if not is_heldout_index(row["episode_index"]):
             failed.append(
-                f"heldout {scenario}-{seed}-{episode_index} breaks "
+                f"heldout {row['phase']}/{row['scenario']}-{row['seed']}-{row['episode_index']} breaks "
                 f"episode_index % {HELD_OUT_MOD} == {HELD_OUT_REMAINDER}"
             )
-    for seed, scenario, episode_index in train_keys:
-        if is_heldout_index(episode_index):
-            failed.append(f"train contains heldout index {scenario}-{seed}-{episode_index}")
+    for row in train_rows:
+        if is_heldout_index(row["episode_index"]):
+            failed.append(
+                f"train contains heldout index {row['phase']}/{row['scenario']}-{row['seed']}-{row['episode_index']}"
+            )
     if profile == "v031":
-        if len(train_keys) != PRODUCTION_SPLIT["train"]:
-            failed.append(f"train={len(train_keys)} want {PRODUCTION_SPLIT['train']}")
-        if len(held_keys) != PRODUCTION_SPLIT["heldout"]:
-            failed.append(f"heldout={len(held_keys)} want {PRODUCTION_SPLIT['heldout']}")
-    elif not held_keys:
+        if len(train_rows) != PRODUCTION_SPLIT["train"]:
+            failed.append(f"train={len(train_rows)} want {PRODUCTION_SPLIT['train']}")
+        if len(held_rows) != PRODUCTION_SPLIT["heldout"]:
+            failed.append(f"heldout={len(held_rows)} want {PRODUCTION_SPLIT['heldout']}")
+    elif not held_rows:
         failed.append("heldout empty (cpu_dev needs n>=10 so episode_index 9 exists)")
     return failed
 
@@ -206,13 +228,16 @@ def _length_failures(records: list[dict[str, Any]], *, profile: str) -> list[str
     for rec in records:
         phase = str(rec.get("phase") or "")
         want = PHASE_LENGTHS.get(phase)
-        got = len(rec.get("transitions") or [])
         obs = len(rec.get("observations") or [])
+        trans = len(rec.get("transitions") or [])
         if want is None:
             failed.append(f"{rec.get('_path')} unknown phase {phase!r}")
             continue
-        if got != want or obs != want:
-            failed.append(f"{phase} length transitions={got} observations={obs} want {want}")
+        if obs != want:
+            failed.append(f"{phase} observations={obs} want {want}")
+            break
+        if trans != max(want - 1, 0):
+            failed.append(f"{phase} transitions={trans} want {want - 1} (obs-1)")
             break
     return failed
 
@@ -303,8 +328,8 @@ def _write_manifest(
         "profile": profile,
         "seed": int(seed),
         "episodes": int(inspection["n_episodes"]),
-        "train": len(_index_identities(root / "train" / "index.jsonl")),
-        "heldout": len(_index_identities(root / "heldout" / "index.jsonl")),
+        "train": len(_index_rows(root / "train" / "index.jsonl")),
+        "heldout": len(_index_rows(root / "heldout" / "index.jsonl")),
         "phase_counts": inspection["phase_counts"],
         "transition_lengths": lengths,
         "pwm": False,
@@ -395,6 +420,20 @@ def verify_v031_dataset(
     }
 
 
+def _reset_pack_root(root: Path) -> None:
+    """Wipe leftover JSON from a previous seed so H200 does not copy v0.2 debris."""
+    for phase in PHASE_ORDER:
+        dest = root / phase
+        if dest.exists():
+            shutil.rmtree(dest)
+    for name in ("index.jsonl", "train", "heldout", "splits.json", MANIFEST_NAME, REPORT_NAME, READY_NAME):
+        path = root / name
+        if path.is_file():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+
+
 def prepare_v031_dataset(
     root: str | Path,
     *,
@@ -412,9 +451,8 @@ def prepare_v031_dataset(
         raise DatasetContractError([f"cpu_dev n={n} < {CPU_DEV_MIN_N} (need episode_index 9 in heldout)"])
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
+    _reset_pack_root(root)
     ready_path = root / READY_NAME
-    if ready_path.exists():
-        ready_path.unlink()
     repo = repo or ROOT
     config = load_simulation(repo / "configs" / "simulation" / "milestone1.yaml")
     write_curriculum(
