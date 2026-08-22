@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from torch import Tensor
 from minakanushi.architecture.config import load_config, load_training
 from minakanushi.architecture.freeze import is_6_8b_profile
 from minakanushi.state.entity import AGENT_SLOT
+from minakanushi.training.checkpoint import load_mina
 from minakanushi.training.episode_dataset import JsonEpisodeDataset
 from minakanushi.training.metrics import counterfactual_separation_score
 from minakanushi.training.trainer import Trainer, UnrollPacket
@@ -287,8 +289,25 @@ def _revision_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def _clear_stale_torchrun() -> None:
+    """Verdict is single-process. Leftover torchrun env must not wrap DTensors."""
+    for key in (
+        "RANK",
+        "WORLD_SIZE",
+        "LOCAL_RANK",
+        "MASTER_ADDR",
+        "MASTER_PORT",
+        "GROUP_RANK",
+        "ROLE_RANK",
+        "LOCAL_WORLD_SIZE",
+        "TORCHELASTIC_RUN_ID",
+    ):
+        os.environ.pop(key, None)
+
+
 def eval_trainer(root: Path, training_yaml: Path, mina: Path) -> Trainer:
-    """Single-process eval construct. No torchrun. H200/B300 only for 6.8B."""
+    """Single-process eval construct. Weights only. No torchrun. H200/B300 only for 6.8B."""
+    _clear_stale_torchrun()
     training = load_training(training_yaml)
     assert_v031_train_dataset(root, training)
     config = load_config(
@@ -297,10 +316,13 @@ def eval_trainer(root: Path, training_yaml: Path, mina: Path) -> Trainer:
         runtime_path=root / "configs" / "runtime" / "cpu.yaml",
         simulation_path=root / training.simulation,
     )
-    train = replace(config.training, parallelism="none", dataset_split="heldout")
-    trainer = Trainer(replace(config, training=train), root)
-    trainer.resume_from(Path(mina))
+    train = replace(config.training, parallelism="none", dataset_split="heldout", activation_checkpoint=False)
+    trainer = Trainer(replace(config, training=train), root, eval_only=True)
+    refuse_cpu_6_8b(trainer)
+    print(f"construct ok device={trainer.device} loading {mina}", flush=True)
+    load_mina(Path(mina), trainer.system, optimizer=None)
     trainer.system.eval()
+    print(f"loaded {mina} eval_only dense", flush=True)
     return trainer
 
 

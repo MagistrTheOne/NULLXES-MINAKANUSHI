@@ -22,7 +22,6 @@ from minakanushi.training.v031_verdict import (
     compare_reports,
     eval_trainer,
     evaluate_heldout,
-    refuse_cpu_6_8b,
     write_report,
 )
 
@@ -31,7 +30,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _run_one(mina: Path, *, config: Path, dataset: Path, traces: int) -> dict:
     trainer = eval_trainer(ROOT, config, mina)
-    refuse_cpu_6_8b(trainer)
     held = JsonEpisodeDataset(dataset, seed=11, split="heldout")
     report = evaluate_heldout(trainer, held, traces=traces)
     report["checkpoint"] = str(mina)

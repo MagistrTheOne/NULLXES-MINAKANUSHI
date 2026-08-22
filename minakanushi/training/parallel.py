@@ -197,6 +197,17 @@ def collect_full_checkpoint(module: nn.Module, optimizer: Optimizer | None) -> d
     return payload
 
 
+def dense_system_state(system_state: dict[str, Any]) -> dict[str, Any]:
+    """FSDP gather can pickle DTensors. Dense eval `load_state_dict` needs plain Tensors."""
+    out: dict[str, Any] = {}
+    for key, value in system_state.items():
+        if torch.is_tensor(value) and type(value).__name__ == "DTensor":
+            out[key] = value.to_local().detach().contiguous()
+        else:
+            out[key] = value
+    return out
+
+
 def apply_full_checkpoint(module: nn.Module, optimizer: Optimizer | None, payload: dict[str, Any]) -> None:
     """Restore a gathered *.mina payload. Collective when the module is FSDP-wrapped."""
     system_state = payload["system"]
@@ -215,7 +226,7 @@ def apply_full_checkpoint(module: nn.Module, optimizer: Optimizer | None, payloa
                 raise ValueError("checkpoint has no optimizer state; refusing silent resume")
             apply_optimizer_checkpoint(optimizer, payload["optimizer"])
         return
-    incompatible = module.load_state_dict(system_state, strict=True)
+    incompatible = module.load_state_dict(dense_system_state(system_state), strict=True)
     if incompatible.missing_keys or incompatible.unexpected_keys:
         raise ValueError(f"strict load failed: {incompatible}")
     if optimizer is not None:

@@ -151,7 +151,7 @@ def _truth_tensors(truth, max_entities: int, device, dtype) -> tuple[Tensor, Ten
 
 
 class Trainer:
-    def __init__(self, config: MinakanushiConfig, root: Path) -> None:
+    def __init__(self, config: MinakanushiConfig, root: Path, *, eval_only: bool = False) -> None:
         if config.training is None:
             raise ValueError("Trainer requires training config")
         train = config.training
@@ -190,17 +190,20 @@ class Trainer:
         if self._amp_enabled:
             self.system.world_core.checkpoint_amp_dtype = self.dtype
         self.constructor = StateConstructor(config.architecture)
-        self.opt = torch.optim.AdamW(
-            self.system.parameters(),
-            lr=config.training.learning_rate,
-            weight_decay=config.training.weight_decay,
-            foreach=False,
-        )
+        self.opt = None
+        self.scheduler = None
+        if not eval_only:
+            self.opt = torch.optim.AdamW(
+                self.system.parameters(),
+                lr=config.training.learning_rate,
+                weight_decay=config.training.weight_decay,
+                foreach=False,
+            )
+            self.scheduler = WarmupScheduler(self.opt, train.warmup_steps, train.learning_rate)
         self.constraints = MinakanushiConstraintKernel(config.simulation)
         self.policy = ActionPolicy()
         self._last_forward_s = 0.0
         self._last_backward_s = 0.0
-        self.scheduler = WarmupScheduler(self.opt, train.warmup_steps, train.learning_rate)
         self.start_step = 1
         self.dataset = None
         self.heldout = None

@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import torch
+
+from minakanushi.training.parallel import dense_system_state
 from minakanushi.training.v031_verdict import compare_reports, summarize
+
+
+def test_dense_system_state_leaves_ordinary_tensors() -> None:
+    weight = torch.ones(2, 3)
+    out = dense_system_state({"w": weight, "n": 1})
+    assert out["w"] is weight
+    assert out["n"] == 1
 
 
 def test_summarize_mean_median_p90_worst10() -> None:
