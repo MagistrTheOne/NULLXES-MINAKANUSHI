@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from types import SimpleNamespace
 
@@ -10,15 +11,17 @@ import torch
 from helpers import cpu_config
 from minakanushi.architecture.mina_unit import KIND_IDS
 from minakanushi.state.correction import REVISION_MAGNITUDE
-from minakanushi.training.revision import revision_metrics, should_revise_mask
+from minakanushi.training.revision import applicable_score, applicable_scores, revision_metrics, should_revise_mask
 from minakanushi.training.revision_forensic import (
     classify_cut,
+    compare_sensor_delay_verdicts,
     diagnose,
     generated_sensor_delay_geometry,
     live_slot_audit,
     metric_empty_teacher_is_not_a_miss,
     spatial_disagreement,
 )
+from minakanushi.training.v031_verdict import write_report
 from simulations.synthetic_world.dataset import generate_episode, training_frame
 
 
@@ -35,6 +38,39 @@ def _slots(*, before, evidence, after, should, has=None, occ=None, ids=None):
         occupied_before=occ,
         entity_id=ids,
     )
+
+
+def test_applicable_score_treats_json_null_like_nan() -> None:
+    assert applicable_score(None) is None
+    assert applicable_score(float("nan")) is None
+    assert applicable_score("null") is None
+    assert applicable_scores([1.0, None, float("nan"), 0.0]) == [1.0, 0.0]
+
+
+def test_compare_sensor_delay_skips_json_null_detection(tmp_path) -> None:
+    before = tmp_path / "step128.json"
+    after = tmp_path / "step1128.json"
+    write_report(
+        before,
+        {"rows": [{"scenario": "sensor_delay", "future_ADE": 7.97, "revision_detected": 1.0}]},
+    )
+    write_report(
+        after,
+        {
+            "rows": [
+                {"scenario": "sensor_delay", "future_ADE": 0.55, "revision_detected": float("nan")},
+                {"scenario": "sensor_delay", "future_ADE": 0.54, "revision_detected": None},
+            ]
+        },
+    )
+    raw = json.loads(after.read_text(encoding="utf-8"))
+    assert raw["rows"][0]["revision_detected"] is None
+    out = compare_sensor_delay_verdicts(before, after)
+    assert out["after"]["n"] == 2
+    assert out["after"]["detection_n_scored"] == 0
+    assert math.isnan(out["after"]["detection_mean"])
+    assert out["before"]["detection_n_scored"] == 1
+    assert out["before"]["detection_mean"] == 1.0
 
 
 def test_empty_teacher_is_excluded_from_detection_denominator() -> None:

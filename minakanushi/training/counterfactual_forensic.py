@@ -161,14 +161,14 @@ def embodiment_audit(rows: list[dict[str, Any]]) -> dict[str, Any]:
         slices[name] = {
             "n": len(group),
             "phase": group[0].get("phase"),
-            "detection": _mean([float(r.get("revision_detected", 0.0)) for r in group]),
-            "direction": _mean([float(r.get("revision_direction_accuracy", 0.0)) for r in group]),
+            "detection": _mean([r.get("revision_detected") for r in group]),
+            "direction": _mean([r.get("revision_direction_accuracy") for r in group]),
             "false_revision": _mean([float(r.get("false_revision_rate", 0.0)) for r in group]),
             "ade": _mean([float(r.get("future_ADE", float("nan"))) for r in group if "future_ADE" in r]),
         }
     return {
         "embodiment_n": len(embodiment),
-        "embodiment_detection": _mean([float(r.get("revision_detected", 0.0)) for r in embodiment]),
+        "embodiment_detection": _mean([r.get("revision_detected") for r in embodiment]),
         "sensor_delay": slices.get("sensor_delay"),
         "agent_move": slices.get("agent_move"),
         "slices": slices,

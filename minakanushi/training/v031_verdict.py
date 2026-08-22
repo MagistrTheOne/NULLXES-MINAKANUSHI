@@ -30,6 +30,7 @@ from minakanushi.training.checkpoint import load_mina
 from minakanushi.training.episode_dataset import JsonEpisodeDataset
 from minakanushi.training.metrics import counterfactual_layers, counterfactual_separation_score
 from minakanushi.training.trainer import Trainer, UnrollPacket
+from minakanushi.training.revision import applicable_score, applicable_scores
 from minakanushi.training.v031_dataset import assert_v031_train_dataset
 
 PHASES = ("physics", "agency", "causality", "embodiment")
@@ -76,7 +77,7 @@ def summarize(values: list[float]) -> dict[str, float]:
     """mean / median / p90 / worst-10. Empty list is not a PASS."""
     if not values:
         return {"n": 0.0, "mean": float("nan"), "median": float("nan"), "p90": float("nan"), "worst10": float("nan")}
-    ordered = sorted(float(v) for v in values if not (isinstance(v, float) and math.isnan(v)))
+    ordered = sorted(applicable_scores(values))
     if not ordered:
         return {"n": 0.0, "mean": float("nan"), "median": float("nan"), "p90": float("nan"), "worst10": float("nan")}
     n = len(ordered)
@@ -238,12 +239,12 @@ def evaluate_heldout(trainer: Trainer, held: JsonEpisodeDataset, *, traces: int 
 
 
 def _mean(values: list[float]) -> float:
-    finite = [float(v) for v in values if not (isinstance(v, float) and math.isnan(v))]
+    finite = applicable_scores(values)
     return sum(finite) / len(finite) if finite else float("nan")
 
 
 def _aggregates(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    return {key: summarize([float(r[key]) for r in rows if key in r]) for key in SCALAR_KEYS}
+    return {key: summarize([r[key] for r in rows if key in r]) for key in SCALAR_KEYS}
 
 
 def _memory_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -316,8 +317,8 @@ def _revision_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
             slice_rows = [r for r in rows if r["scenario"] == "hidden_correction_l2"]
         out[name] = {
             "n": len(slice_rows),
-            "detection_rate": _mean([float(r["revision_detected"]) for r in slice_rows]),
-            "direction_accuracy": _mean([float(r["revision_direction_accuracy"]) for r in slice_rows]),
+            "detection_rate": _mean([r.get("revision_detected") for r in slice_rows]),
+            "direction_accuracy": _mean([r.get("revision_direction_accuracy") for r in slice_rows]),
             "false_revision_rate": _mean([float(r["false_revision_rate"]) for r in slice_rows]),
             "recovery_latency": _mean([float(r["revision_latency"]) for r in slice_rows]),
         }

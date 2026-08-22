@@ -19,6 +19,8 @@ from minakanushi.state.correction import REVISION_MAGNITUDE
 from minakanushi.training.revision import (
     AGENT_ENTITY_ID,
     MOVE_DETECT,
+    applicable_score,
+    applicable_scores,
     revision_metrics,
     should_revise_mask,
 )
@@ -295,12 +297,8 @@ def compare_sensor_delay_verdicts(before: Path, after: Path) -> dict[str, Any]:
         group = [r for r in rows if str(r.get("scenario")) == "sensor_delay"]
         if not group:
             return {"n": 0}
-        ade = [float(r["future_ADE"]) for r in group]
-        det = [
-            float(r["revision_detected"])
-            for r in group
-            if not (isinstance(r.get("revision_detected"), float) and math.isnan(float(r["revision_detected"])))
-        ]
+        ade = applicable_scores(r.get("future_ADE") for r in group)
+        det = applicable_scores(r.get("revision_detected") for r in group)
         return {
             "n": len(group),
             "ade_mean": sum(ade) / len(ade),

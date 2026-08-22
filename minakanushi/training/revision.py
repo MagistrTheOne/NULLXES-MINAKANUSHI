@@ -9,6 +9,10 @@ Not a constructor rewrite. Not a DWC architecture change.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Iterable
+from typing import Any
+
 import torch
 from torch import Tensor
 
@@ -20,6 +24,25 @@ from simulations.synthetic_world.dataset import DELAY_EVIDENCE_SCENARIOS
 AGENT_ENTITY_ID = 1
 MOVE_DETECT = 0.05
 NOT_APPLICABLE = float("nan")
+
+
+def applicable_score(value: Any) -> float | None:
+    """Finite metric, or None if missing / JSON null / NaN after write_report."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(number) or math.isinf(number):
+        return None
+    return number
+
+
+def applicable_scores(values: Iterable[Any]) -> list[float]:
+    return [score for value in values if (score := applicable_score(value)) is not None]
 
 
 def evidence_for_slots(world: WorldState, units: MinaUnitBatch) -> tuple[Tensor, Tensor, Tensor]:

@@ -25,6 +25,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+from minakanushi.training.revision import applicable_scores
 from minakanushi.training.revision_forensic import diagnose, live_slot_audit
 from minakanushi.training.v031_verdict import _jsonable, write_report
 
@@ -78,7 +79,7 @@ def _live_one(mina: Path, *, config: Path, dataset: Path) -> dict:
     n = len(rows) or 1
     suppressed = sum(1 for r in rows if r["cut"] == "teacher_suppressed")
     no_mover = sum(1 for r in rows if r["cut"] == "no_mover_evidence")
-    scored = [r["revision_detected"] for r in rows if r["revision_detected"] == r["revision_detected"]]
+    scored = applicable_scores(r.get("revision_detected") for r in rows)
     summary = {
         "checkpoint": str(mina),
         "n": len(rows),
