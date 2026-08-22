@@ -37,6 +37,11 @@ def main() -> None:
         require_mina=bool(args.require_mina),
     )
     print(json.dumps(report, indent=2, sort_keys=True))
+    passport = Path("artifacts/v031/run_manifest.json")
+    src = args.out / "run_manifest.json"
+    if src.is_file():
+        passport.parent.mkdir(parents=True, exist_ok=True)
+        passport.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     if report.get("checkpoint_sha256") == "MISSING" and args.require_mina:
         raise SystemExit("baseline lock missing step128 *.mina")
 

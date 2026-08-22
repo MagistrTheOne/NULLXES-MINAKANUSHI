@@ -268,7 +268,7 @@ def lock_baseline(
         n_train = int(split_info.get("n_train") or 0)
         n_heldout = int(split_info.get("n_heldout") or 0)
         n_episodes = int(split_info.get("n_episodes") or n_episodes)
-    manifest = write_run_manifest(
+    write_run_manifest(
         out_dir / "run_manifest.json",
         training_config=train_raw,
         checkpoint_sha256=str(report.get("checkpoint_sha256") or "MISSING"),
@@ -277,18 +277,7 @@ def lock_baseline(
         n_train=n_train or 900,
         n_heldout=n_heldout or 100,
     )
-    v031 = repo / "artifacts" / "v031" / "run_manifest.json"
-    if v031.resolve() != (out_dir / "run_manifest.json").resolve():
-        write_run_manifest(
-            v031,
-            training_config=train_raw,
-            checkpoint_sha256=str(report.get("checkpoint_sha256") or "MISSING"),
-            git_status=status,
-            n_episodes=manifest["episodes"],
-            n_train=manifest["train_split"],
-            n_heldout=manifest["heldout_split"],
-        )
-    report["run_manifest"] = str(v031)
+    report["run_manifest"] = str(out_dir / "run_manifest.json")
 
     (out_dir / "lock_report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"

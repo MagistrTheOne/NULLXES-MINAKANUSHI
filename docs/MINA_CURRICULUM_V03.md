@@ -24,7 +24,10 @@ python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03 --gate
 
 Held-out is `episode_index % 10 == 9` by `(seed, scenario, episode_index)`, not a file shuffle: 900 train / 100 held-out. JSON stays in phase folders; only `train/index.jsonl` and `heldout/index.jsonl` are added.
 
-Extended audit (n≥1000) also fails if a revision type is zero, if one action ≥95%, or if `future_diversity` has no spread (min/max/mean/std).
+Extended audit (n≥1000) fails if a revision type is zero or if one action ≥95%.
+`future_diversity` min/max/mean/std are recorded. Existence can PASS while
+diversity is NOT PASS (one arena geometry → v0.4). `decision_entropy` and
+`wait_required` vs `wait_safe_button` say whether WAIT is observe or a default.
 
 Gate before H200:
 

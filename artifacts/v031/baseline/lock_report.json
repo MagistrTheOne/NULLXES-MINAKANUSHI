@@ -6,7 +6,39 @@
     "n_episodes": 1000,
     "pwm": false
   },
-  "git_commit": "a389718ef8e271e9e0be491adcbdd6b6121f1888",
+  "git_commit": "d30301a170f0d8214601ec3c32497b4f241bb211 CODE_DIRTY",
+  "git_status": {
+    "code_dirty": true,
+    "code_dirty_files": [
+      "docs/MINA_CAPABILITY_LEDGER.md",
+      "docs/MINA_CURRICULUM_V03.md",
+      "docs/MINA_TRAINING_CONTRACT_v03.md",
+      "minakanushi/training/lock.py",
+      "minakanushi/training/trainer.py",
+      "scripts/lock_v031_baseline.py",
+      "tests/unit/test_capability_ledger.py",
+      "tests/unit/test_curriculum_6_8b.py",
+      "tests/unit/test_lock_v031.py"
+    ],
+    "dirty_files": [
+      "artifacts/v031/baseline/capability_before.json",
+      "artifacts/v031/capability/capability_report.json",
+      "docs/MINA_CAPABILITY_LEDGER.md",
+      "docs/MINA_CURRICULUM_V03.md",
+      "docs/MINA_TRAINING_CONTRACT_v03.md",
+      "minakanushi/training/lock.py",
+      "minakanushi/training/trainer.py",
+      "scripts/lock_v031_baseline.py",
+      "tests/unit/test_capability_ledger.py",
+      "tests/unit/test_curriculum_6_8b.py",
+      "tests/unit/test_lock_v031.py"
+    ],
+    "git_commit": "d30301a170f0d8214601ec3c32497b4f241bb211",
+    "local_dirty": [
+      "artifacts/v031/baseline/capability_before.json",
+      "artifacts/v031/capability/capability_report.json"
+    ]
+  },
   "hardware": {
     "canonical_checkpoint": "*.mina",
     "dataset_root": "dataset/mina_6_8b_v03",
@@ -29,5 +61,6 @@
   },
   "out_dir": "artifacts\\v031\\baseline",
   "reference_inference": "SKIPPED",
-  "research_scale": null
+  "research_scale": null,
+  "run_manifest": "artifacts\\v031\\baseline\\run_manifest.json"
 }

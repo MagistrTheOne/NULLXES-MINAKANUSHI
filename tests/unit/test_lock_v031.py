@@ -35,6 +35,15 @@ def test_lock_writes_origin_pack_without_mina(tmp_path: Path) -> None:
     assert (out / "training_config.yaml").is_file()
     assert (out / "git_commit.txt").is_file()
     assert (out / "hardware.json").is_file()
+    assert (out / "run_manifest.json").is_file()
+    assert (out / "git_status.json").is_file()
+    manifest = json.loads((out / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["model"] == "MINAKANUSHI-6.8B"
+    assert manifest["rgb"] is False
+    assert manifest["pwm"] is False
+    assert manifest["steps"] == 1000
+    status = json.loads((out / "git_status.json").read_text(encoding="utf-8"))
+    assert "code_dirty" in status
     dataset = json.loads((out / "dataset_report.json").read_text(encoding="utf-8"))
     assert "future_diversity_min" in dataset
     assert "revision_distribution" in dataset

@@ -578,7 +578,7 @@ class Trainer:
                     held = self._metrics(held_pkt)
                 metrics["heldout_score"] = float(held["future_ADE"])
             else:
-                metrics["heldout_score"] = float("nan")
+                metrics["heldout_score"] = None
         return TrainLog(
             step=step,
             loss=float(pkt.breakdown.total.item()),

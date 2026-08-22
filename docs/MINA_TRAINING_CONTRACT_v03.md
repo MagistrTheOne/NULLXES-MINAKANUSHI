@@ -33,17 +33,24 @@ Canonical weights remain `*.mina`. safetensors is a Hub mirror only.
 1000 steps
 then STOP
 
-watch:
+watch every 50 steps (`experiment.jsonl`):
   loss
-  future ADE/FDE
-  revision
+  future ADE / FDE
+  revision_accuracy
+  false_revision
   memory_future_delta
-  counterfactual
+  counterfactual_distance
+  heldout_score
 ```
 
-Do not wait for a pretty curve. After step 1000, run retention (Gate A) and
-held-out (Gate B). Update `docs/MINA_CAPABILITY_LEDGER.md` only from counted
-measurements (`n=`, ADE on/off), never from `loss=`.
+Do not wait for a pretty curve. After step 1000, compare `capability_before`
+vs `capability_after` (`scripts/compare_v031.py`). Not step128 loss vs stepN
+loss.
+
+Passport: `artifacts/v031/run_manifest.json`.
+
+If git is dirty, `git_status.json` must say whether **code** is dirty or only
+`dataset/` / `artifacts/`. Code must be unambiguous before H200.
 
 Config: `configs/training/mina_6_8b_v03.yaml` (`dataset_split: train`, `steps: 1000`).
 

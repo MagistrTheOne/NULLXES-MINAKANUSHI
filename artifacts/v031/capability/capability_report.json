@@ -1,4 +1,5 @@
 {
+  "all_proven": false,
   "allowed_claims": [
     "MINA \u0443\u043b\u0443\u0447\u0448\u0438\u043b\u0430 prediction error",
     "MINA \u043d\u0430\u0443\u0447\u0438\u043b\u0430\u0441\u044c \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c belief",
@@ -57,11 +58,12 @@
       "unseen_seed": 9999
     },
     "C": {
+      "capability_proven": false,
       "claim": "external event unexpected_physics, revision = velocity hypothesis invalid. Not new-picture \u2192 new-answer.",
       "external_event": "unexpected_physics",
       "frame": 6,
       "gate": "C_causality",
-      "pass": true,
+      "pass": false,
       "picture_in_picture_out": true,
       "revision_detected": 0.0,
       "scenario": "unexpected_stop",
@@ -83,7 +85,7 @@
       "memory_ade_on": 2.2365944385528564,
       "memory_future_delta": -0.013537131249904633,
       "memory_helps_future": 0.0,
-      "pass": true,
+      "pass": false,
       "reacquisition_accuracy": 1.0
     },
     "F": {
@@ -156,6 +158,12 @@
     }
   ],
   "not_a_claim": "loss dropped is not intelligence appeared",
-  "pass": true,
-  "protocol": "MINA capability ledger"
+  "note": "pass flags corrected to match measurements; do not treat old pass=true as proven",
+  "pass": false,
+  "protocol": "MINA capability ledger",
+  "protocol_complete": true,
+  "unproven": [
+    "C",
+    "E"
+  ]
 }

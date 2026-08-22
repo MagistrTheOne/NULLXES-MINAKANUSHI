@@ -22,6 +22,7 @@
     "wrong_velocity": 156
   },
   "dataset_root": "dataset\\mina_6_8b_v03",
+  "decision_entropy": 1.0983452293998903,
   "event_count": 56283,
   "future_diversity_collapsed": true,
   "future_diversity_max": 0.7785991915741844,
@@ -110,8 +111,12 @@
     31,
     63
   ],
+  "wait_required": 34876,
+  "wait_required_fraction": 1.0,
+  "wait_safe_button": 0,
   "warnings": {
     "future_diversity_collapsed": true,
-    "note": "min/max/mean/std are recorded. collapse=true means fork distance is nearly constant across episodes (arena geometry), not that forks are missing."
+    "note": "min/max/mean/std are recorded. collapse=true means fork distance is nearly constant across episodes (arena geometry), not that forks are missing. Existence PASS, diversity NOT PASS. v0.4 geometry expansion.",
+    "wait_note": "WAIT majority is observe-default, not MOVE_TO 95%. wait_safe_button>0 means WAIT on agency scenarios that should MOVE/FOLLOW/AVOID."
   }
 }

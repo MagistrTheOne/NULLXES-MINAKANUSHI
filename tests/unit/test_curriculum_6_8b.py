@@ -89,6 +89,9 @@ def test_audit_curriculum_report(tmp_path: Path) -> None:
     assert "future_diversity_std" in report
     assert "revision_distribution" in report
     assert "max_action_fraction" in report
+    assert "decision_entropy" in report
+    assert "wait_required" in report
+    assert "wait_safe_button" in report
     assert (tmp_path / "train" / "index.jsonl").is_file()
     assert (tmp_path / "heldout" / "index.jsonl").is_file()
     assert "future_diversity_collapsed" in report

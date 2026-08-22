@@ -1,0 +1,20 @@
+{
+  "architecture": "frozen",
+  "architecture_lock": "7aba976",
+  "base_checkpoint": "step128",
+  "checkpoint_sha256": "MISSING",
+  "code_dirty": true,
+  "compare": "capability_before vs capability_after, not step128 loss vs step1128 loss",
+  "dataset": "mina_6_8b_v03",
+  "episodes": 1000,
+  "eval_every": 50,
+  "git_commit": "d30301a170f0d8214601ec3c32497b4f241bb211",
+  "hardware": "H200",
+  "heldout_split": 100,
+  "model": "MINAKANUSHI-6.8B",
+  "pwm": false,
+  "rgb": false,
+  "steps": 1000,
+  "stop_condition": "manual after 1000 steps",
+  "train_split": 900
+}
