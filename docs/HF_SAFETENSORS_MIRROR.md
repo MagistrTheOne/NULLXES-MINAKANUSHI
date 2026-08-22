@@ -43,5 +43,16 @@ Load path remains `load_mina(...)`. `AutoModel.from_pretrained` is a type tag
 (`AutoConfig` / `AutoModel`, never `AutoModelForCausalLM`) and refuses
 `latent_dim >= 4096` construct. It is not the runtime.
 
-Upload is a later step. This document does not publish weights. Do not
-convert step128 on a laptop.
+Every published checkpoint after v0.3.1 ships **both**:
+
+```text
+*.mina                 canonical runtime / resume / identity / optimizer
+safetensors shards     Hub weight mirror (bf16)
+```
+
+Do not convert step64. Do not construct 6.8B to export. Export on H200/B300,
+then `scripts/test_hf_reload.py` must PASS (0-dim scalars are valid if they
+match the shard header). Upload is `scripts/publish_v031_hf.py`.
+
+v0.3.1 Hub card is a **research checkpoint, not accepted**.
+`compare_v031.py` is the verdict, not train loss.

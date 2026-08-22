@@ -82,6 +82,9 @@ def hf_config(manifest: dict, *, canonical_checkpoint: str) -> dict:
         "future_branches": int(manifest["future_branches"]),
         "canonical_checkpoint": canonical_checkpoint,
         "canonical_format": "mina",
+        "status": "research_checkpoint",
+        "accepted": False,
+        "capability_verdict": "pending_compare_v031",
         "pwm": False,
         "not_a_language_model": True,
         "not_a_chat_model": True,
@@ -105,6 +108,8 @@ def minakanushi_native_config(manifest: dict, *, canonical_checkpoint: str) -> d
         "canonical_format": "mina",
         "canonical_checkpoint": canonical_checkpoint,
         "public_mirror": "safetensors",
+        "status": "research_checkpoint",
+        "accepted": False,
         "action_output": "ActionIntent",
         "pwm": False,
         "latent_dim": int(manifest["latent_dim"]),
@@ -139,6 +144,8 @@ def minakanushi_card(*, hardware: str = "B300/H200 class") -> dict:
         "hardware": hardware,
         "canonical_format": "mina",
         "public_mirror": "safetensors",
+        "status": "research_checkpoint",
+        "accepted": False,
     }
     assert_not_llm_card(card)
     return card

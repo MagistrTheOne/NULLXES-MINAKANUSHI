@@ -15,22 +15,51 @@ from torch import Tensor
 from minakanushi.training.hf_export import export_hf_mirror
 
 
-def _load_shards(out_dir: Path) -> dict[str, Tensor]:
-    from safetensors.torch import load_file
-
-    restored: dict[str, Tensor] = {}
+def _shard_names(out_dir: Path) -> list[str]:
     index_path = out_dir / "model.safetensors.index.json"
     if index_path.is_file():
         index = json.loads(index_path.read_text(encoding="utf-8"))
-        for name in sorted(set(index["weight_map"].values())):
-            restored.update(load_file(str(out_dir / name)))
-        return restored
-    shards = sorted(out_dir.glob("*.safetensors"))
-    if not shards:
+        return sorted(set(index["weight_map"].values()))
+    return [path.name for path in sorted(out_dir.glob("*.safetensors"))]
+
+
+def _load_shards(out_dir: Path) -> dict[str, Tensor]:
+    from safetensors.torch import load_file
+
+    names = _shard_names(out_dir)
+    if not names:
         raise FileNotFoundError(f"no safetensors under {out_dir}")
-    for path in shards:
-        restored.update(load_file(str(path)))
+    restored: dict[str, Tensor] = {}
+    for name in names:
+        restored.update(load_file(str(out_dir / name)))
     return restored
+
+
+def shard_header_shapes(out_dir: Path) -> dict[str, tuple[int, ...]]:
+    """Shapes from safetensors headers. Empty tuple is a valid 0-dim scalar."""
+    from safetensors import safe_open
+
+    shapes: dict[str, tuple[int, ...]] = {}
+    for name in _shard_names(out_dir):
+        with safe_open(str(out_dir / name), framework="pt") as fh:
+            for key in fh.keys():
+                shapes[key] = tuple(fh.get_slice(key).get_shape())
+    return shapes
+
+
+def tensors_match_headers(
+    tensors: dict[str, Tensor],
+    shapes: dict[str, tuple[int, ...]],
+) -> bool:
+    """True when every loaded tensor matches its shard header, including ndim==0."""
+    if set(tensors) != set(shapes):
+        return False
+    for name, tensor in tensors.items():
+        if not isinstance(tensor, torch.Tensor):
+            return False
+        if tuple(tensor.shape) != shapes[name]:
+            return False
+    return True
 
 
 def export_and_reload(

@@ -127,6 +127,34 @@ def test_export_sharded_mina_and_cards_only(tmp_path: Path) -> None:
     assert (cards / "architecture.yaml").exists()
 
 
+def test_scalar_header_is_valid_shape_match(tmp_path: Path) -> None:
+    pytest.importorskip("safetensors")
+    from safetensors.torch import save_file
+
+    from minakanushi.training.export_roundtrip import (
+        _load_shards,
+        shard_header_shapes,
+        tensors_match_headers,
+    )
+
+    out = tmp_path / "mirror"
+    out.mkdir()
+    save_file(
+        {
+            "weight": torch.randn(4, 8),
+            "scale": torch.tensor(1.5),
+        },
+        str(out / "model.safetensors"),
+    )
+    shards = _load_shards(out)
+    headers = shard_header_shapes(out)
+    assert headers["scale"] == ()
+    assert shards["scale"].ndim == 0
+    assert tensors_match_headers(shards, headers) is True
+    headers["scale"] = (1,)
+    assert tensors_match_headers(shards, headers) is False
+
+
 def test_export_roundtrip_reloads_bf16(tmp_path: Path) -> None:
     pytest.importorskip("safetensors")
     from minakanushi.training.export_roundtrip import export_and_reload

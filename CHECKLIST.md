@@ -20,7 +20,8 @@
 | Infer (не train) | 6000 BW или 1× H100 80GB | веса bf16 ~13.6 GB + голова мира | не путать с train 6.8B |
 
 HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B)  
-Корень Hub: `minakanushi_stage0_step64.mina` + `minakanushi_stage0_step128.mina`
+Корень Hub: `step64.mina` + `step128.mina` + **`step1128.mina` + safetensors зеркало step1128**  
+Карточка: **research checkpoint, v0.3.1 not accepted yet.** Коллекция: ASI (WorldModel).
 
 ---
 
@@ -123,43 +124,21 @@ H200
   вердикт A / B / C
 ```
 
+### Сделано на H200 (ещё не A/B/C)
+
+- [x] **Phase −1. Dataset pack** — CPU/2080 · seed 11 · `.READY_V031` · 900/100 · 32/64 · `pwm=false`
+- [x] **Phase 0. Lock baseline** — verify read-only + `lock_v031_baseline.py` + step128
+- [x] **Phase 1. Safetensors** — зеркало **step1128** (не step128) · `artifacts/v031/step1128/MINAKANUSHI-6.8B`
+- [x] **Phase 2. CPU contract** — pack contract держался; C/E до train честно FAIL
+- [x] **Phase 3. H200 1000 steps STOP** — `experiments/mina_6_8b_v031` · `minakanushi_stage0_step1128.mina`  
+  Train-eval hint: **B / late C-signal**. Это не вердикт.
+
 ### Ещё открыто (только это)
 
-- [ ] **Phase −1. Dataset pack** — ноут / 2080, не H200  
-  `python scripts/prepare_v031_dataset.py --root dataset/mina_6_8b_v03 --n 250 --seed 11`  
-  Default `--n=250`, `--profile v031`. `n<250` на production — FAIL. Dev: `--profile cpu_dev`.  
-  После PASS: `dataset_manifest.json` + `.READY_V031`. Копировать **всю папку** на H200.  
-  `train.py` / `mina_6_8b_v03.yaml` без marker — refuse. H200 split не дописывает.
-
-- [ ] **Phase 0. Lock baseline** — на H200, после `hf download` и copy pack  
-  `python scripts/verify_v031_dataset.py --root dataset/mina_6_8b_v03`  
-  (read-only: не generate, не split)  
-  `python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --require-mina --out artifacts/v031/baseline`  
-  `python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina`  
-  Точка невозврата: `checkpoint.sha256` + metrics + capability_before + dataset_report + training_config + hardware + git_commit.
-
-- [ ] **Phase 1. Safetensors** — там же, не локально  
-  `python scripts/export_safetensors.py --mina minakanushi_stage0_step128.mina --out MINAKANUSHI-6.8B`  
-  `python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B`  
-  Гейт: load tensor · shape match · **6799130646** · AutoModel type tag · **AutoModelForCausalLM absent**.
-
-- [ ] **Phase 2. CPU contract** — ноут/2080 после prepare, не обучение  
-  `python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout`  
-  Без `.READY_V031` — FAIL, split не дописывается.  
-  Ожидание до H200: C/E **честно FAIL** (`revision_detected = 0`, ADE memory on ≮ off). Это baseline, не сломанный скрипт.
-
-- [ ] **Phase 3. H200 1000 steps STOP**  
-  ```text
-  torchrun --nproc_per_node=1 scripts/train.py \
-    --config configs/training/mina_6_8b_v03.yaml \
-    --resume minakanushi_stage0_step128.mina \
-    --out experiments/mina_v031_h200
-  ```  
-  Смотреть каждые 50: `revision_detected` · `false_revision` · ADE(memory on) < ADE(memory off) · `std(distance)` · **heldout ADE**.  
-  Не смотреть `loss ↓` как победу. После 1000 — стоп, даже если хочется ещё 5000.
-
-- [ ] **Compare ledger**  
-  `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after experiments/mina_v031_h200/capability_after.json`
+- [ ] **HF publish** — `step1128.mina` + safetensors + metrics на [MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B), карточка *research / not accepted*, коллекция ASI (WorldModel), датасеты на Hub
+- [ ] **Compare ledger** — после upload, не v0.4  
+  `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after experiments/mina_v031_h200/capability_after.json`  
+  Смотреть: heldout 100 · revision · false revision · direction · memory on/off ADE · WAIT vs MOVE_TO · action.
 
 ### Вердикт (после compare, не раньше)
 

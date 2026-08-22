@@ -13,7 +13,11 @@ import torch
 
 from minakanushi.architecture.freeze import FROZEN_PARAM_ESTIMATE
 from minakanushi.hub import HUB_MODEL_TYPE, refuse_if_research_scale, register_minakanushi
-from minakanushi.training.export_roundtrip import _load_shards
+from minakanushi.training.export_roundtrip import (
+    _load_shards,
+    shard_header_shapes,
+    tensors_match_headers,
+)
 from minakanushi.training.hf_export import assert_not_llm_card
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +37,7 @@ def main() -> None:
         raise SystemExit(f"model_type={config.get('model_type')!r} is not minakanushi")
     parameters = int(config.get("parameters") or 0)
     shards = _load_shards(root)
+    headers = shard_header_shapes(root)
     n_params = sum(int(t.numel()) for t in shards.values())
     config_cls, model_cls = register_minakanushi()
     cfg = config_cls(model_type=HUB_MODEL_TYPE, latent_dim=int(config.get("latent_dim") or 4096))
@@ -44,7 +49,8 @@ def main() -> None:
     if not refused:
         raise SystemExit("6.8B AutoModel construct was not refused")
     causal = "ForCausalLM" in model_cls.__name__ or "CausalLM" in json.dumps(config)
-    shape_ok = all(isinstance(t, torch.Tensor) and t.ndim >= 1 for t in shards.values())
+    # 0-dim scalars are valid if the shard header shape is ().
+    shape_ok = tensors_match_headers(shards, headers)
     count_ok = parameters == FROZEN_PARAM_ESTIMATE or n_params == FROZEN_PARAM_ESTIMATE
     report = {
         "path": str(root),

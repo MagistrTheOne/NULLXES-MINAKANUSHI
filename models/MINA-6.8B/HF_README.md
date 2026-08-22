@@ -11,12 +11,27 @@ tags:
   - physical-intelligence
   - robotics
   - pytorch
+  - safetensors
   - not-a-llm
-  - researched
+  - research-checkpoint
 base_model: []
 ---
 
 # MINAKANUSHI-6.8B
+
+```text
+Status:              Research checkpoint
+Training cycle:      v0.3.1
+Capability verdict:  pending compare_v031.py
+Accepted:            NO
+Not a language model
+Canonical runtime:   .mina
+Safetensors:         weight mirror only
+Action output:       ActionIntent
+PWM:                 false
+```
+
+**v0.3.1 is not accepted yet.** Latest weights are a research checkpoint after 1000 H200 steps from `step128`. Train-eval hint is **B / C-signal**. Official A/B/C comes only from `scripts/compare_v031.py` on the capability ledger (heldout 100, revision, false revision, direction, memory on/off ADE, WAIT vs MOVE_TO, action learning). Do not read `loss ↓` as a pass.
 
 **NULLXES MINAKANUSHI** — adaptive situational intelligence for autonomous physical systems.
 
@@ -81,16 +96,21 @@ architecture_version: "0.1"
 
 ## Checkpoints (repo root)
 
+Canonical runtime is `*.mina`. Every published model after v0.3.1 also ships a **safetensors weight mirror**. Safetensors is not the runtime.
+
 | File | What |
 |---|---|
-| [`minakanushi_stage0_step64.mina`](minakanushi_stage0_step64.mina) | Status Core v0.1 · 1× H200 · seed 11 · git `d70bfc0` · 64 steps |
+| [`minakanushi_stage0_step1128.mina`](minakanushi_stage0_step1128.mina) | **v0.3.1 research** · 1× H200 · resume step128 · `dataset/mina_6_8b_v03` · steps **129–1128** · **not accepted** |
 | [`minakanushi_stage0_step128.mina`](minakanushi_stage0_step128.mina) | Status Core v0.2 · 1× B300 · resume IdentityBound · JSON curriculum · steps **65–128** · git `ede6bda` |
+| [`minakanushi_stage0_step64.mina`](minakanushi_stage0_step64.mina) | Status Core v0.1 · 1× H200 · seed 11 · git `d70bfc0` · 64 steps |
+| `model-00001-of-00003.safetensors` … `00003` | Weight mirror of **step1128** only · bf16 · Hub badge |
+| `metrics_v031.jsonl` · `experiment_v031.jsonl` | v0.3.1 train/eval log. Not a capability ledger. |
 
-Format: native `nullxes-minakanushi` zip (`ZIP_STORED`). Same architecture. v0.2 is a continuation (optimizer + identity), not a clone.
+Format: native `nullxes-minakanushi` zip (`ZIP_STORED`). Same architecture. v0.3.1 is a continuation, not a clone.
 
-Safetensors shards are a **later** Hugging Face mirror (Hub parameter badge). They are not the runtime. Canonical load stays `load_mina`. Do not convert step64. See `docs/HF_SAFETENSORS_MIRROR.md`.
+Do not convert step64. See `docs/HF_SAFETENSORS_MIRROR.md`.
 
-Also at root: `metrics_v02.jsonl`, `train_v02.log`.
+Also at root: `metrics_v02.jsonl`, `train_v02.log`, `reference_inference_v031.pt`.
 
 ```text
 observation → MinaUnit → NullxesPositionField → WorldState
@@ -118,12 +138,10 @@ Freeze: do not add layers / MoE / language head / `identity_loss`. Do not train 
 
 ### Open
 
-- [ ] Acceptance Gate v0.2 — `scripts/gate_v02_acceptance.py` (`cpu_dev` first)
-- [ ] Yunmu review — ActionIntent in, their controller out; not before the gate
-- [ ] HF safetensors mirror — after Acceptance Gate; `.mina` stays canonical; see `docs/HF_SAFETENSORS_MIRROR.md`
-- [ ] Long 6.8B — same freeze, same native JSON
+- [ ] **compare_v031.py** — heldout 100 · revision · false revision · direction · memory on/off ADE · WAIT vs MOVE_TO · action. This is the A/B/C gate. Not v0.4.
+- [ ] Long 6.8B — same freeze, only after compare verdict
 - [ ] Gate 9+ perception — pixels → MinaUnit
-- [ ] MINA V2 MM — organs → MinaUnit (not VLA/Cosmos); not train until Yunmu/Gate 9+
+- [ ] MINA V2 MM — organs → MinaUnit (not VLA/Cosmos)
 
 ### Must-hold
 
@@ -151,6 +169,23 @@ ActionIntent ≠ PWM
 | constraint_violation_count | **0** |
 | closed_loop_success_rate | 1.0 |
 | false_revision_rate | 0.0 |
+
+### v0.3.1 · step 1128 · H200 (research, not accepted)
+
+Train-eval series only. **Not** `compare_v031.py`. Hint: **B / late C-signal**.
+
+| Signal | Value |
+|---|---|
+| heldout ADE (single-episode protocol) | 1.61 @150 → 0.15 @750 → 0.44 @1100 |
+| false_revision | 0 until eval 1100 (`1.0` after step-1080 spike) |
+| counterfactual distance | ≈ 0.0008 entire run (WAIT ≈ MOVE_TO) |
+| action term | ≈ 0.499 frozen |
+| revision_detection | often > 0 (was 0 at unexpected_stop on step128) |
+| revision_direction | ≈ 0 most batches |
+| memΔ | latent L2, not ADE(on) < ADE(off) |
+| capability verdict | **pending compare_v031.py** |
+
+Do not treat this table as v0.3.1 PASS.
 
 ### v0.2 · step 128 · B300 (JSON resume)
 
