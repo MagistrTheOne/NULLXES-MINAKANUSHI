@@ -20,7 +20,8 @@ Status of the latest published weights (`minakanushi_stage0_step1128.mina`):
 Research checkpoint
 Training cycle: v0.3.1
 Accepted: NO
-Capability verdict: pending / H200 heldout-100 protocol
+Capability verdict: B
+C-signal: counterfactual terminal diversity failed
 Not a language model
 Action output: ActionIntent
 PWM: false
@@ -160,11 +161,81 @@ Persistence / reacquisition 1.0. Hard-constraint violations 0. Future ADE / FDE 
 
 Future ADE / FDE 2.05 / 0.68. Revision accuracy 0.0. Branch coverage 0.0. False revision 0.0. Resume preserved identity and optimizer. Not an intelligence pass.
 
-### v0.3.1 · step 1128 · H200
+### v0.3.1 · step 1128 · H200 · official heldout-100
 
-Train-eval monitor (one heldout episode per 50 steps) is **not** the verdict. Hint only: heldout ADE 1.61 → 0.15 → bounce 0.44; revision detection often live; `cf ≈ 0.0008`; action term ≈ 0.499; false revision appeared after a step-1080 spike.
+Protocol: `scripts/gate_v031_h200_verdict.py`. Same 100 heldout episodes, same seed, step128 vs step1128. Ledger: `artifacts/v031/verdict/compare.json`.
 
-Official numbers: `artifacts/v031/verdict/compare.json` after the H200 heldout-100 job.
+**Variant B. Not accepted.**
+
+```text
+B:
+  world prediction improved
+  memory usefulness demonstrated
+  revision direction improved (not ≈ 0)
+
+C-signal:
+  counterfactual terminal diversity failed
+
+Not C:
+  false revision stayed in budget
+  memory ADE(on) < ADE(off)
+  revision direction did not collapse
+```
+
+Heldout aggregates, n=100:
+
+| | step128 mean / median / p90 / worst-10 | step1128 |
+|---|---|---|
+| ADE | 6.78 / 7.33 / 8.95 / 12.53 | **0.845 / 0.581 / 1.13 / 3.15** |
+| FDE | 1.75 / 1.69 / 2.25 / 3.70 | **0.265 / 0.167 / 0.317 / 1.07** |
+| uncertainty | 1.14 / 1.38 / 1.89 / 2.17 | **0.582 / 0.517 / 0.571 / 1.35** |
+| revision detected | 0.85 / 1.00 / 1.00 / 1.00 | 0.64 / 1.00 / 1.00 / 1.00 |
+| revision direction | 0.41 / 0.00 / 1.00 / 1.00 | **0.64 / 1.00 / 1.00 / 1.00** |
+| false revision | 0.00 | 0.05 |
+
+ADE by phase (mean):
+
+| Phase | step128 | step1128 |
+|---|---|---|
+| physics | 7.35 | 1.41 (accelerate still ~4; turn/occlusion/obstacles ~0.3–0.6) |
+| agency | 3.82 | 0.61 |
+| causality | 8.29 | 0.68 |
+| embodiment | 7.66 | 0.68 |
+
+Memory (same episodes, same seed; not latent L2):
+
+| | ADE on | ADE off | FDE on | FDE off |
+|---|---|---|---|---|
+| all 100 | 0.845 | 1.885 | 0.265 | 0.525 |
+| memory slices n=40 | **0.606** | 1.345 | **0.184** | 0.358 |
+
+Help rate on those slices: **1.0**. Gate PASS.
+
+WAIT vs MOVE_TO on one world state (n=100):
+
+| | mean |
+|---|---|
+| terminal score (`cf`) | 0.000786 · std 3.4e-6 · diversity FAIL |
+| trajectory delta | 0.176 |
+| relation delta | 0.238 |
+| action-vector ‖WAIT−MOVE_TO‖ (n=20) | 1.414 |
+| Future Engine terminal ‖F_WAIT−F_MOVE_TO‖ | 0.401 |
+
+ActionIntent reaches the Future Engine. The failed gate is the **terminal score diversity**, not a missing action vector. Trajectory and relation already move; the official `cf` number does not.
+
+Revision slices (step1128):
+
+| Slice | n | detect | direction | false rev |
+|---|---|---|---|---|
+| hidden_correction / l2 / l3 | 3 / 4 / 4 | 1.00 | 1.00 | 0.00 |
+| conflict | 4 | 1.00 | 1.00 | 0.00 |
+| reacquisition | 4 | 1.00 | 1.00 | 0.00 |
+| unexpected_stop | 9 | 0.78 | 0.78 | 0.00 |
+| gone_forever | 3 | 0.33 | 0.33 | 0.67 |
+
+Train-log `revision_direction ≈ 0` is not the heldout fact. Detection dropped because embodiment mean went to 0.24; correction slices stayed honest.
+
+Next cycle, if any: data / sampler / action-conditioning metric — not new layers, not more 1000 steps on the same loss.
 
 ---
 

@@ -1,0 +1,27 @@
+{
+  "accepted": false,
+  "c_signals": [
+    "counterfactual separation failed"
+  ],
+  "counterfactual_diversity": false,
+  "counterfactual_existence": true,
+  "false_revision": {
+    "after": 0.05,
+    "before": 0.0,
+    "ok": true
+  },
+  "heldout_ADE": {
+    "after": 0.844867454469204,
+    "before": 6.782014989852906,
+    "improved": true
+  },
+  "memory_pass": true,
+  "not_a_claim": "train loss is not this verdict. Single-episode eval is not this verdict.",
+  "revision_detected": {
+    "after": 0.64,
+    "before": 0.85,
+    "improved": false
+  },
+  "revision_direction_after": 0.64,
+  "variant": "B"
+}

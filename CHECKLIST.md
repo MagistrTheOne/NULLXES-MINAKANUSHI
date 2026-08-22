@@ -21,7 +21,7 @@
 
 HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B)  
 Корень Hub: `step64.mina` + `step128.mina` + **`step1128.mina` + safetensors зеркало step1128**  
-Карточка: **research checkpoint, v0.3.1 not accepted yet.** Коллекция: ASI (WorldModel).
+Карточка: **research checkpoint, v0.3.1 verdict B, not accepted.** Коллекция: ASI (WorldModel).
 
 ---
 
@@ -124,7 +124,7 @@ H200
   вердикт A / B / C
 ```
 
-### Сделано на H200 (ещё не A/B/C)
+### Сделано на H200
 
 - [x] **Phase −1. Dataset pack** — CPU/2080 · seed 11 · `.READY_V031` · 900/100 · 32/64 · `pwm=false`
 - [x] **Phase 0. Lock baseline** — verify read-only + `lock_v031_baseline.py` + step128
@@ -133,29 +133,24 @@ H200
 - [x] **Phase 3. H200 1000 steps STOP** — `experiments/mina_6_8b_v031` · `minakanushi_stage0_step1128.mina`  
   Train-eval hint: **B / late C-signal**. Это не вердикт.
 
-### Ещё открыто (только это)
-
 - [x] **HF publish** — `step1128.mina` + safetensors + metrics на [MINAKANUSHI-6.8B](https://huggingface.co/MagistrTheOne/MINAKANUSHI-6.8B), карточка *research / not accepted*, коллекция [ASI (WorldModel)](https://huggingface.co/collections/MagistrTheOne/asi-worldmodel-6a89f942152bb18dd68c144b), датасет [mina-6.8b-v03](https://huggingface.co/datasets/MagistrTheOne/mina-6.8b-v03)
-- [ ] **Compare ledger** — H200, не ещё один train, не v0.4  
-  С H200: `cd /workspace/NULLXES-MINAKANUSHI` затем  
-  `python scripts/gate_v031_h200_verdict.py --before step128.mina --after step1128.mina --out artifacts/v031/verdict`  
-  Лог: `tail -f /workspace/NULLXES-MINAKANUSHI/experiments/mina_6_8b_v031_verdict.log`  
-  Полные 100 heldout: mean/median/p90/worst-10 · фазы · memory ON/OFF ADE+FDE · WAIT vs MOVE_TO · revision slices · action trace.  
-  Train-eval hint не считается. Вердикт пишет `compare.json` (`A` / `B` / `C`).
+- [x] **Compare ledger** — 100 heldout · step128 vs step1128 · `artifacts/v031/verdict/compare.json`  
+  **Вариант B. v0.3.1 не accepted.**  
+  ADE 6.78 → 0.845 · memory PASS (0.606 < 1.345 на n=40) · direction 0.41 → 0.64 · detection 0.85 → 0.64 · false_rev 0.05 ok · **C-signal: cf terminal diversity FAIL** (`cf≈0.000786`, std 3.4e-6). Action vector 1.414 доходит до Future Engine (‖ΔF‖≈0.40). Не ещё один train. Не v0.4.
 
-### Вердикт (после compare, не раньше)
+### Вердикт (закрыт)
 
 | | Что видим | Что делать |
 |---|---|---|
 | **A** | revision ↑ · memory ADE on < off · heldout ADE ↓ · false_revision ≈ 0 | v0.3.1 PASS → следующий цикл: geometry / long horizon |
-| **B** | loss ↓ · train ADE ↓ · heldout = · memory = · revision = | подгонка. Менять sampler/curriculum/scenarios. **Не архитектуру.** |
+| **B** ← факт | heldout ADE ↓ · memory PASS · direction ↑ · detection ↓ · **cf diversity FAIL** | action-conditioning / sampler / scenarios. **Не слои. Не ещё 1000 steps.** |
 | **C** | revision ломается · false_revision растёт | чинить causality в данных/лоссе. **Не слои.** |
 
 ---
 
 ## Не этот цикл
 
-Длинный 6.8B, pixels → MinaUnit, органы, другие тела — **после** вердикта A/B/C. Не смешивать с Phase 0–3. Не открывать параллельный train.
+Длинный 6.8B, pixels → MinaUnit, органы, другие тела — не этот отчёт. v0.4 (geometry) только после A. Сейчас B: не открывать параллельный train.
 
 ---
 
