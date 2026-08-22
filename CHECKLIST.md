@@ -164,8 +164,8 @@ H200
 Оставшийся дефект — не counterfactual и не memory. Калибровка кнопки «пересмотреть belief», особенно `sensor_delay`.
 
 - [x] CPU forensic: delay = timestamp; train frame = `length//2` без mover; one-step и delay-path < `0.25`; empty teacher → detected=0
-- [ ] H200 live dump `max_before_d` step128 vs step1128 **только sensor_delay heldout** (`scripts/diagnose_revision_v031r.py`)
-- [ ] локальный патч teacher/метрики — только после live cut-point. **Не общий train. Не v0.4.**
+- [x] H200 live n=13 `sensor_delay`: оба чекпоинта `n_mover=0` frame 32; max_before_d **2.85 → 0.11**; n_need **1 → 0**; detect **1.00 → 0.00**. `hypothesis_holds=true`
+- [ ] локальный патч teacher/кадра/метрики. **Не общий train. Не v0.4.**
 
 ## Не этот цикл
 

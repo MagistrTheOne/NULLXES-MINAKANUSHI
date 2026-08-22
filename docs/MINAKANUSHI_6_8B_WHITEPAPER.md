@@ -237,7 +237,7 @@ Revision slices (step1128):
 
 Train-log `revision_direction ≈ 0` is not the heldout fact. Detection dropped because embodiment mean went to 0.24; correction slices stayed honest.
 
-Next cycle is **v0.3.1-R**, not v0.4: revision-trigger calibration on `sensor_delay` (`docs/V031R_REVISION.md`). Occupied counterfactual already exists. Do not open a new general train until the live `max_before_d` dump says where the teacher is cut.
+v0.3.1-R live (n=13 `sensor_delay`, frame 32): no mover on either checkpoint. Leftover residual **2.85 → 0.11**. Teacher n_need **1 → 0**. Detect **1.00 → 0.00**. Better world prediction killed a false obstacle trigger. Next is a local teacher/frame/metric patch, not another train (`docs/V031R_REVISION.md`).
 
 ---
 

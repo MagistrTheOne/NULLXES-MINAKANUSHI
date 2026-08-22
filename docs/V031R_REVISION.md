@@ -54,10 +54,30 @@ python scripts/diagnose_revision_v031r.py \
   --out artifacts/v031r/live.json
 ```
 
-Live dump should print `cut=` per episode. Expect `no_mover_evidence` on the trained frame. If step1128 leftover `max_before_d < 0.25` and step128 is not, the “better prediction suppresses revision” half is also confirmed.
+## H200 live — closed (`artifacts/v031r/live.json`)
+
+n=13 `sensor_delay` heldout. Train frame **32** (length 64). `hypothesis_holds=true`.
+
+| | step128 | step1128 |
+|---|---|---|
+| cut | `no_mover_evidence` 13/13 | `no_mover_evidence` 13/13 |
+| n_mover_evidence | 0.0 | 0.0 |
+| n_need | **1.0** | **0.0** |
+| max_before_d | **2.847** | **0.113** |
+| detected | **1.00** | **0.00** |
+| constructor corrections | 0.0 | 0.0 |
+| ADE (verdict slice) | 7.97 | 0.55 |
+
+Leftover evidence is one static slot. step128 residual ≈ 2.85 trips `REVISION_MAGNITUDE`. step1128 residual ≈ 0.11 does not. Same empty mover, same wrong frame. Detection drop is the better tracker plus a meter that scores `n_need==0` as a miss.
+
+Constructor never wrote `CorrectionEvent`. This is not a swallowed correction inside DWC.
 
 ## After the live dump — still no general train
 
-If the hypothesis holds: the next patch is local (teacher that sees delay / tracking-vs-revision split / metric that does not punish empty teacher). Not 1000 more steps. Not new layers. Not v0.4.
+Local patch only:
 
-If live shows `n_need>0` and `moved≈0`: then the constructor/DWC is swallowing a real correction. That is a different one-line fix, still not a general train.
+1. `training_frame("sensor_delay")` must be a frame that still sees the mover (curriculum frame 2), not `length//2`.
+2. `revision_metrics`: empty teacher is not `detected=0`. Omit or mark not-applicable.
+3. Do not treat leftover obstacle residual as a delay-revision teacher.
+
+Not 1000 more steps. Not new layers. Not v0.4. Weights stay `step1128.mina`.
