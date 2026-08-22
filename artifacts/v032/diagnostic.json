@@ -20,7 +20,9 @@
     "next": "fix acceptance metric to occupied/agent cf, rerun heldout-100, no train",
     "synthetic": {
       "agent_cf": 0.4000000059604645,
-      "empty_slot_collapse": 1.0,
+      "empty_slot_collapse": 512.0,
+      "empty_slot_dilution": 0.001953125,
+      "empty_slot_factor": 512.0,
       "frobenius": 0.4000000059604645,
       "n_occupied": 1.0,
       "n_slots": 512.0,

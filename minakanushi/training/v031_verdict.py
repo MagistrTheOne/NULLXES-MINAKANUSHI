@@ -57,6 +57,10 @@ REVISION_SLICES = (
     "unexpected_stop",
     "gone_forever",
 )
+# Occupied/agent gate. All-slot official cf is logged, not the pass rule.
+CF_EXISTENCE_MIN = 1e-4
+CF_DIVERSITY_MIN = 1e-4
+
 SCALAR_KEYS = (
     "future_ADE",
     "future_FDE",
@@ -268,6 +272,9 @@ def _cf_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
     gated_on = "occupied" if occupied else "official"
     return {
         "terminal": summarize(term),
+        "cf_all_slots": summarize(term),
+        "cf_occupied": summarize(occupied) if occupied else None,
+        "cf_agent": summarize(agent) if agent else None,
         "occupied": summarize(occupied) if occupied else None,
         "agent": summarize(agent) if agent else None,
         "trajectory": summarize(traj),
@@ -275,11 +282,13 @@ def _cf_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "std_terminal": _std(term),
         "std_occupied": _std(occupied) if occupied else None,
         "gated_on": gated_on,
-        "existence": bool(gate) and max(gate) > 1e-4,
-        "diversity": bool(gate) and _std(gate) > 1e-4,
-        "pass_existence": bool(gate) and max(gate) > 1e-4,
-        "pass_diversity": bool(gate) and _std(gate) > 1e-4,
-        "official_diversity_failed": bool(term) and _std(term) <= 1e-4,
+        "existence_min": CF_EXISTENCE_MIN,
+        "diversity_min": CF_DIVERSITY_MIN,
+        "existence": bool(gate) and max(gate) > CF_EXISTENCE_MIN,
+        "diversity": bool(gate) and _std(gate) > CF_DIVERSITY_MIN,
+        "pass_existence": bool(gate) and max(gate) > CF_EXISTENCE_MIN,
+        "pass_diversity": bool(gate) and _std(gate) > CF_DIVERSITY_MIN,
+        "official_diversity_failed": bool(term) and _std(term) <= CF_DIVERSITY_MIN,
     }
 
 

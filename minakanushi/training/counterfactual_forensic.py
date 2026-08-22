@@ -23,6 +23,11 @@ V031_OFFICIAL_CF_MEAN = 0.0007857031049206853
 V031_OFFICIAL_CF_STD = 3.3952208637715273e-06
 V031_FUTURE_FROBENIUS = 0.40054136961698533
 V031_WORLD_SLOTS = 512
+# Trainer: after resume step128, start_step=129, end=start+1000-1=1128.
+# mode uses job = step - start_step + 1; choose() RNG uses global step.
+V031_RESUME_START = 129
+V031_LAST_STEP = 1128
+V031_WARM_STEPS = 16
 MEMORY_EMBODIMENT = frozenset({"sensor_delay", "motor_delay", "agent_move", "gone_forever"})
 SAMPLER_FOCUS = (
     "gone_forever",
@@ -80,27 +85,50 @@ def replay_sampler(
     scenarios: tuple[str, ...],
     *,
     seed: int = 11,
-    steps: int = 1000,
-    warm_steps: int = 16,
-    start_step: int = 1,
+    first_step: int = V031_RESUME_START,
+    last_step: int = V031_LAST_STEP,
+    resume_start: int = V031_RESUME_START,
+    warm_steps: int = V031_WARM_STEPS,
 ) -> dict[str, Any]:
-    """What the optimizer actually saw. Index only. Not JSON-on-disk counts."""
+    """Replay the v0.3.1 optimizer order. Not dataset JSON counts.
+
+    Trainer keys `choose(step)` on the global step. Warm/intelligence uses
+    `job = step - start_step + 1`. After resume from step128 that is 129..1128.
+    """
     if len(phases) != len(scenarios):
         raise ValueError("phases / scenarios length mismatch")
+    if last_step < first_step:
+        raise ValueError(f"last_step {last_step} < first_step {first_step}")
     dummy = tuple(Path(f"{i}.json") for i in range(len(phases)))
     sampler = PhaseCurriculumSampler(dummy, phases, seed=seed)
     phase_hits: Counter[str] = Counter()
     scenario_hits: Counter[str] = Counter()
     mode_hits: Counter[str] = Counter()
-    for job in range(start_step, start_step + steps):
+    steps_out: list[dict[str, Any]] = []
+    for step in range(int(first_step), int(last_step) + 1):
+        job = int(step) - int(resume_start) + 1
         mode = mode_for_job_step(job, warm_steps=warm_steps)
-        idx = sampler.choose(job, mode)
+        idx = sampler.choose(step, mode)
         phase_hits[phases[idx]] += 1
         scenario_hits[scenarios[idx]] += 1
         mode_hits[mode] += 1
+        steps_out.append(
+            {
+                "step": int(step),
+                "job": int(job),
+                "mode": mode,
+                "phase": phases[idx],
+                "scenario": scenarios[idx],
+                "paired_wait_move": True,
+            }
+        )
+    n_steps = last_step - first_step + 1
     focus = {name: int(scenario_hits.get(name, 0)) for name in SAMPLER_FOCUS}
     return {
-        "steps": steps,
+        "first_step": int(first_step),
+        "last_step": int(last_step),
+        "resume_start": int(resume_start),
+        "steps": n_steps,
         "seed": seed,
         "warm_steps": warm_steps,
         "n_train_episodes": len(phases),
@@ -108,12 +136,12 @@ def replay_sampler(
         "phases": dict(phase_hits),
         "scenarios": dict(scenario_hits),
         "focus_scenarios": focus,
-        "paired_wait_move_every_step": steps,
+        "paired_wait_move_every_step": n_steps,
+        "optimizer_steps": steps_out,
         "note": (
+            "choose(step) uses global step 129..1128. mode uses job 1..1000. "
             "Every train step already builds WAIT vs MOVE_TO via counterfactual_candidate. "
-            "Paired contrast is not rare. Official cf still dilutes it by empty slots. "
-            "L_action uses the same all-slot mean, so margin 0.25 is never reached "
-            "(need agent Δ ≈ 0.25 * 512)."
+            "L_action still dilutes that pair by empty slots."
         ),
     }
 
@@ -136,10 +164,13 @@ def embodiment_audit(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "detection": _mean([float(r.get("revision_detected", 0.0)) for r in group]),
             "direction": _mean([float(r.get("revision_direction_accuracy", 0.0)) for r in group]),
             "false_revision": _mean([float(r.get("false_revision_rate", 0.0)) for r in group]),
+            "ade": _mean([float(r.get("future_ADE", float("nan"))) for r in group if "future_ADE" in r]),
         }
     return {
         "embodiment_n": len(embodiment),
         "embodiment_detection": _mean([float(r.get("revision_detected", 0.0)) for r in embodiment]),
+        "sensor_delay": slices.get("sensor_delay"),
+        "agent_move": slices.get("agent_move"),
         "slices": slices,
         "gone_forever_n_is_small": int(slices.get("gone_forever", {}).get("n", 0)) <= 3,
         "do_not_change_global_objective": True,
@@ -189,6 +220,9 @@ def diagnose(
     dataset: Path | None = None,
     verdict_rows: Path | None = None,
     slots: int = V031_WORLD_SLOTS,
+    first_step: int = V031_RESUME_START,
+    last_step: int = V031_LAST_STEP,
+    resume_start: int = V031_RESUME_START,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
         "cycle": "v0.3.2-diagnostic",
@@ -200,7 +234,13 @@ def diagnose(
     }
     if dataset is not None:
         phases, scenarios = load_index_rows(dataset)
-        report["sampler"] = replay_sampler(phases, scenarios)
+        report["sampler"] = replay_sampler(
+            phases,
+            scenarios,
+            first_step=first_step,
+            last_step=last_step,
+            resume_start=resume_start,
+        )
     else:
         report["sampler"] = {"status": "skipped", "reason": "no --dataset"}
     if verdict_rows is not None:

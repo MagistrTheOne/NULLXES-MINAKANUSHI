@@ -32,23 +32,58 @@ Recovered agent std = `3.4e-6 * 512 ≈ 0.0017 > 1e-4` → occupied/agent divers
 
 `L_action` uses the same all-slot mean. Margin 0.25 needs agent Δ ≈ 128. That loss never saturates. Do not “fix” it with more steps.
 
-## Order
+## Occupied / agent gate (frozen before the next heldout-100)
 
-| # | Job | Machine | Train? |
-|---|---|---|---|
-| 1 | `python scripts/diagnose_counterfactual_v031.py` | CPU | no |
-| 2 | same + `--dataset dataset/mina_6_8b_v03` | H200 or local pack | no |
-| 3 | same + `--verdict artifacts/v031/verdict/step1128.json` | H200 | no |
-| 4 | Re-run heldout-100 **only if** we keep fork A and want a new official gate on occupied/agent | 1× H200 | **no** |
-| 5 | v0.3.2 train | only if 4 still fails after occupied gate | continuation from step1128 |
+```text
+cf_all_slots  = mean_i ||Δxy_i||     over all world_slots   ← log only
+cf_occupied   = mean   ||Δxy_i||     over occupied slots    ← official gate
+cf_agent      =        ||Δxy_agent||                        ← action-self check
 
-## If 4 passes
+existence PASS:  max(cf_occupied) > 1e-4
+diversity PASS:  std(cf_occupied) > 1e-4
+```
 
-Re-evaluate v0.3.1 as B→maybe A on the **occupied** gate. Weights stay `step1128.mina`. Card stays research until that JSON says A.
+`cf_all_slots` is the v0.3.1 artifact. It must not decide acceptance.
 
-## If 4 fails
+Constants: `CF_EXISTENCE_MIN` / `CF_DIVERSITY_MIN` in `minakanushi/training/v031_verdict.py`.
 
-Then sampler / `L_action` occupied mean / embodiment slices. Still no new DWC.
+## H200 verification — no optimizer
+
+Do not run until this commit is on the pod. Then, from `/workspace/NULLXES-MINAKANUSHI`:
+
+```text
+git pull --ff-only
+
+python scripts/diagnose_counterfactual_v031.py \
+  --out artifacts/v032/diagnostic_metric.json
+
+python scripts/diagnose_counterfactual_v031.py \
+  --verdict artifacts/v031/verdict/step1128.json \
+  --out artifacts/v032/diagnostic_embodiment.json
+
+python scripts/diagnose_counterfactual_v031.py \
+  --dataset dataset/mina_6_8b_v03 \
+  --first-step 129 --last-step 1128 --resume-start 129 \
+  --out artifacts/v032/diagnostic_sampler.json
+
+python scripts/gate_v031_h200_verdict.py \
+  --before /workspace/checkpoints/minakanushi_stage0_step128.mina \
+  --after experiments/mina_6_8b_v031/minakanushi_stage0_step1128.mina \
+  --dataset dataset/mina_6_8b_v03 \
+  --out artifacts/v031/verdict_occupied
+```
+
+Sampler RNG is global step `129..1128`. Mode is job `1..1000`. Replay of `1..1000` is the wrong experiment.
+
+## GO / NO-GO after occupied heldout-100
+
+GO without train if occupied diversity PASS, memory PASS, heldout ADE still down, revision direction ≥ 0.2, false revision ≤ 0.1.
+
+Then v0.3.1 is **B caused by metric artifact** (or A if the frozen gate closes).
+
+NO-GO on acceptance if `cf_occupied` / `cf_agent` still FAIL. Only then targeted v0.3.2 train from step1128.
+
+Weights stay `step1128.mina`. Card stays research until the occupied ledger says A.
 
 ## Embodiment (do not touch global objective)
 

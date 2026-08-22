@@ -29,6 +29,10 @@ def test_official_cf_is_agent_delta_over_empty_slots() -> None:
     assert abs(float(layers["occupied_cf"]) - agent) < 1e-6
     assert abs(float(layers["frobenius"]) - agent) < 1e-6
     assert abs(official * slots - agent) < 1e-6
+    assert abs(float(layers["empty_slot_dilution"]) - 1.0 / slots) < 1e-6
+    assert abs(float(layers["empty_slot_factor"]) - slots) < 1e-6
+    assert abs(float(layers["empty_slot_collapse"]) - slots) < 1e-6
+    assert abs(float(layers["empty_slot_collapse"]) - 1.0) > 0.5
 
 
 def test_v031_ledger_recovers_future_engine_norm() -> None:
@@ -48,11 +52,27 @@ def test_sampler_replay_is_deterministic() -> None:
         "gone_forever",
         "sensor_delay",
     ) * 4
-    a = replay_sampler(phases, scenarios, steps=32, warm_steps=4)
-    b = replay_sampler(phases, scenarios, steps=32, warm_steps=4)
+    a = replay_sampler(phases, scenarios, first_step=1, last_step=32, resume_start=1, warm_steps=4)
+    b = replay_sampler(phases, scenarios, first_step=1, last_step=32, resume_start=1, warm_steps=4)
     assert a["scenarios"] == b["scenarios"]
     assert a["paired_wait_move_every_step"] == 32
+    assert a["first_step"] == 1
+    assert a["optimizer_steps"][0]["step"] == 1
     assert sum(a["phases"].values()) == 32
+
+
+def test_v031_replay_uses_global_steps_129_to_1128_not_1_to_1000() -> None:
+    phases = tuple(["physics", "agency", "causality", "embodiment"] * 8)
+    scenarios = ("accelerate", "agent_move", "gone_forever", "sensor_delay") * 8
+    wrong = replay_sampler(phases, scenarios, first_step=1, last_step=1000, resume_start=1)
+    right = replay_sampler(phases, scenarios)
+    assert right["first_step"] == 129
+    assert right["last_step"] == 1128
+    assert right["optimizer_steps"][0]["step"] == 129
+    assert right["optimizer_steps"][0]["job"] == 1
+    assert right["optimizer_steps"][-1]["step"] == 1128
+    assert right["optimizer_steps"][-1]["job"] == 1000
+    assert wrong["scenarios"] != right["scenarios"]
 
 
 def test_embodiment_audit_does_not_blame_correction_slices() -> None:

@@ -218,7 +218,9 @@ def counterfactual_layers(
             raise ValueError(f"occupied {tuple(occupied.shape)} != slots {per_slot.shape[0]}")
         occupied_cf = (per_slot * mask).sum() / mask.sum().clamp_min(1.0)
         n_occupied = mask.sum()
-    collapse = official * n_slots / agent.clamp_min(1e-12)
+    moving = (per_slot > 0).to(dtype=per_slot.dtype).sum().clamp_min(1.0)
+    # Dilution = official/agent → 1/512 when only the agent moves.
+    # Factor = n_slots/moving → 512. official*n_slots/agent == 1 is an identity, not this.
     return {
         "official_cf": official,
         "occupied_cf": occupied_cf,
@@ -226,7 +228,9 @@ def counterfactual_layers(
         "frobenius": frobenius,
         "n_slots": n_slots,
         "n_occupied": n_occupied,
-        "empty_slot_collapse": collapse,
+        "empty_slot_dilution": official / agent.clamp_min(1e-12),
+        "empty_slot_factor": n_slots / moving,
+        "empty_slot_collapse": n_slots / moving,
     }
 
 
