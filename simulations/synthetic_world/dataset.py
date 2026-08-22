@@ -53,27 +53,60 @@ TRAIN_CURRICULUM: tuple[str, ...] = (
     "accelerate",
 )
 
-# Observation index of the revision event. Trainer must train this frame, not idx=3.
+# Observation index of the revision event at the original length-12 pack.
+# Longer v0.3 trajectories scale this so history exists before evidence.
 CORRECTION_FRAME: dict[str, int] = {
     "hidden_correction": 6,
+    "hidden_correction_l1": 6,
+    "hidden_correction_l2": 6,
+    "hidden_correction_l3": 6,
     "reacquisition": 6,
+    "hidden_object": 6,
     "conflict": 4,
     "gone_forever": 3,
 }
 
+PHYSICS_ALIAS: dict[str, str] = {
+    "reacquisition": "hidden_correction",
+    "hidden_object": "hidden_correction",
+    "hidden_correction_l1": "hidden_correction",
+    "hidden_correction_l2": "hidden_correction",
+    "hidden_correction_l3": "hidden_correction",
+    "wrong_velocity": "turn",
+    "sensor_delay": "delayed",
+}
 
-def training_frame(scenario: str, length: int) -> int:
-    """Select the transition that carries the cognitive event.
 
-    Returns idx such that observations[idx] → observations[idx+1] is legal.
-    For correction scenarios that is the frame where evidence returns or conflicts.
+def hidden_level(scenario: str) -> int:
+    if str(scenario).endswith("_l3"):
+        return 3
+    if str(scenario).endswith("_l2"):
+        return 2
+    return 1
+
+
+def revision_frame(scenario: str, length: int) -> int:
+    """Frame whose transition carries the cognitive event.
+
+    At length<=12 keep the original indices so Gate 03 tests stay bitwise.
+    At 32/64 scale so the chain is observe → error → evidence → revision → new future.
     """
     if length < 2:
         raise ValueError("episode too short to train a transition")
     named = CORRECTION_FRAME.get(scenario)
     if named is None:
-        named = max(1, min(length // 2, length - 2))
-    return int(max(0, min(named, length - 2)))
+        idx = max(1, min(length // 2, length - 2))
+    elif length <= 12:
+        idx = min(named, length - 2)
+    else:
+        idx = int(round(named * (length - 1) / 11.0))
+        idx = max(1, min(idx, length - 2))
+    return int(max(0, min(idx, length - 2)))
+
+
+def training_frame(scenario: str, length: int) -> int:
+    """Select the transition that carries the cognitive event."""
+    return revision_frame(scenario, length)
 
 
 @dataclass
@@ -142,10 +175,11 @@ def generate_episode(
     scenario: str | None = None,
 ) -> Episode:
     name = scenario or SCENARIOS[episode_index % len(SCENARIOS)]
-    physics = "hidden_correction" if name == "reacquisition" else name
+    physics = PHYSICS_ALIAS.get(name, name)
     local_seed = int(seed) * 1_000_003 + int(episode_index) * 9176
     world = SyntheticWorld(config, seed=local_seed)
     rng = np.random.default_rng(local_seed)
+    rev = revision_frame(name, length)
 
     if physics == "accelerate":
         world.movers[0].accel = np.array([0.4, 0.0], dtype=np.float64)
@@ -167,7 +201,7 @@ def generate_episode(
 
     frames_obs: list[Observation] = []
     frames_gt: list[FrameTruth] = []
-    delay = 0.15 if name == "delayed" else 0.0
+    delay = 0.15 if name in {"delayed", "sensor_delay"} else 0.0
     if name == "motor_delay":
         delay = 0.30
 
@@ -176,25 +210,54 @@ def generate_episode(
             pass
         if physics == "turn" and t == length // 2:
             world.movers[0].vel = np.array([0.0, 0.7])
+        if length > 12 and physics == "turn" and t == (length * 3) // 4:
+            world.movers[0].vel = np.array([0.55, -0.35])
+        if length > 12 and physics == "accelerate" and t == (length * 2) // 3:
+            world.movers[0].accel = np.array([-0.6, 0.2], dtype=np.float64)
+        if length > 12 and physics == "brake" and t == (length * 2) // 3:
+            world.movers[0].accel = np.array([0.35, 0.15], dtype=np.float64)
+            world.movers[0].vel = np.array([0.2, 0.4], dtype=np.float64)
         if physics == "unexpected_stop" and t == length // 2:
             world.movers[0].vel = np.zeros(2)
             world.movers[0].accel = None
+        if length > 12 and physics == "unexpected_stop" and t == (length * 3) // 4:
+            world.movers[0].vel = np.array([0.4, 0.3])
+        if length > 12 and physics in {"const_velocity", "obstacles"} and t == (length * 3) // 4:
+            world.movers[0].vel = np.array([float(world.movers[0].vel[0]), 0.5])
+        if length > 12 and name == "follow" and t == length // 2:
+            world.movers[0].vel = np.array([0.0, 0.6])
+        if length > 12 and name == "avoid" and t == length // 2:
+            world.obstacles[0].xy = world.agent.xy + np.array([0.85, 0.0])
+        if length > 12 and name == "agent_move" and t == length // 2:
+            alt = world.targets[min(1, len(world.targets) - 1)]
+            world.targets[0].xy = alt.xy.copy()
         if physics == "hidden_correction":
-            if 1 <= t <= 5:
+            level = hidden_level(name)
+            if 1 <= t < rev:
                 world.hidden_ids.add(world.movers[0].body_id)
-            elif t == 6:
+                if level == 2 and t == max(2, rev // 2):
+                    world.movers[0].vel = np.array([0.0, 0.75], dtype=np.float64)
+                if level == 3 and t == max(2, rev // 2):
+                    world.movers[0].vel = np.array([0.7, 0.4], dtype=np.float64)
+            elif t == rev:
                 world.hidden_ids.discard(world.movers[0].body_id)
-                world.movers[0].xy = world.agent.xy + np.array([1.4, 0.0])
-                world.movers[0].vel = np.zeros(2)
+                if level <= 1:
+                    world.movers[0].xy = world.agent.xy + np.array([1.4, 0.0])
+                    world.movers[0].vel = np.zeros(2)
+                elif level == 2:
+                    world.movers[0].xy = world.agent.xy + np.array([1.4, 0.0])
+                else:
+                    world.movers[0].xy = world.agent.xy + np.array([0.2, 1.6])
+                    world.movers[0].vel = np.array([-0.2, 0.8], dtype=np.float64)
             else:
                 world.hidden_ids.discard(world.movers[0].body_id)
         if physics == "conflict":
-            if t < 4:
+            if t < rev:
                 world.movers[0].xy = world.agent.xy + np.array([1.0, 0.0])
             else:
                 world.movers[0].xy = world.agent.xy + np.array([3.0, 0.0])
                 world.movers[0].vel = np.zeros(2)
-        if physics == "gone_forever" and t >= 3:
+        if physics == "gone_forever" and t >= rev:
             world.removed_ids.add(world.movers[0].body_id)
             world.hidden_ids.add(world.movers[0].body_id)
         if name == "motor_delay" and t < 2:
@@ -202,6 +265,16 @@ def generate_episode(
         elif name == "goal_change":
             tgt = world.targets[0] if t < length // 2 else world.targets[min(1, len(world.targets) - 1)]
             intent = _intent("MOVE_TO", (float(tgt.xy[0]), float(tgt.xy[1])))
+        elif name == "follow":
+            mover = world.movers[0]
+            intent = _intent("FOLLOW", (float(mover.xy[0]), float(mover.xy[1])))
+        elif name == "avoid":
+            wall = world.obstacles[0]
+            away = world.agent.xy - wall.xy
+            nrm = float(np.linalg.norm(away))
+            step = away / nrm if nrm > 1e-6 else np.array([1.0, 0.0])
+            tgt = world.agent.xy + step
+            intent = _intent("AVOID", (float(tgt[0]), float(tgt[1])))
         elif name in {"agent_move", "motor_delay"}:
             intent = _intent("MOVE_TO", (float(world.targets[0].xy[0]), float(world.targets[0].xy[1])))
         else:

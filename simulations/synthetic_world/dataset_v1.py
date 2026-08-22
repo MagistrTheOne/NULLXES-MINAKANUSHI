@@ -91,7 +91,13 @@ def _outcomes_for_frame(episode: Episode, t: int) -> list[dict]:
         err = float(np.linalg.norm(pred - np.asarray(actual, dtype=np.float64)))
         lesson = "consistent"
         if err >= 0.25:
-            lesson = "velocity hypothesis revised" if episode.scenario in {"turn", "conflict", "hidden_correction"} else "transition_mismatch"
+            lesson = "velocity hypothesis revised" if episode.scenario in {
+                "turn",
+                "wrong_velocity",
+                "conflict",
+                "hidden_correction",
+                "hidden_object",
+            } else "transition_mismatch"
         rows.append(
             {
                 "frame": t,
@@ -240,6 +246,11 @@ def validate_episode_record(record: dict, *, curriculum_6_8b: bool = False) -> N
         raise ValueError("actions / observations length mismatch")
     if curriculum_6_8b and record.get("embodiment", {}).get("pwm") is True:
         raise ValueError("embodiment.pwm must be false")
+    if record.get("curriculum") == "mina_6_8b_v03":
+        if not record.get("counterfactuals"):
+            raise ValueError("v0.3 episode needs counterfactual forks")
+        if float(record.get("future_diversity") or 0.0) <= 1e-6:
+            raise ValueError("v0.3 episode needs future_diversity > 0")
 
 
 def _visible_from_world(world: dict, visible_ids: list[int], obs_visible: list[dict] | None) -> tuple[dict, ...]:

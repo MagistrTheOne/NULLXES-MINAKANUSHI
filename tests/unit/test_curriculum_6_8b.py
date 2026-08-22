@@ -54,14 +54,18 @@ def test_v02_phases_include_causal_agency_embodiment() -> None:
 
     assert "brake" in PHASES["physics"]
     assert "goal_change" in PHASES["agency"]
+    assert "follow" in PHASES["agency"]
+    assert "avoid" in PHASES["agency"]
     assert "hidden_correction" in PHASES["causality"]
+    assert "hidden_object" in PHASES["causality"]
     assert "motor_delay" in PHASES["embodiment"]
+    assert "sensor_delay" in PHASES["embodiment"]
     config = load_simulation(ROOT / "configs" / "simulation" / "milestone1.yaml")
-    for scenario in ("brake", "goal_change", "unexpected_stop", "motor_delay"):
+    for scenario in ("brake", "goal_change", "unexpected_stop", "motor_delay", "follow", "avoid", "wrong_velocity"):
         episode = generate_episode(config, seed=7, episode_index=0, length=8, scenario=scenario)
         assert episode.scenario == scenario
         assert len(episode.observations) == 8
-        assert episode.truth[0].action in {"WAIT", "MOVE_TO"}
+        assert episode.truth[0].action in {"WAIT", "MOVE_TO", "FOLLOW", "AVOID"}
 
 
 def test_audit_curriculum_report(tmp_path: Path) -> None:
@@ -79,3 +83,28 @@ def test_audit_curriculum_report(tmp_path: Path) -> None:
     assert report["pwm"] is False
     assert report["hf_role"] == "adapter_only"
     assert set(report["phase_counts"]) == {"physics", "agency", "causality", "embodiment"}
+    assert report["gate"]["pwm_false"] is True
+
+
+def test_v03_default_lengths_and_counterfactual_forks() -> None:
+    from simulations.synthetic_world.curriculum_6_8b import PHASE_LENGTHS, episode_record
+    from simulations.synthetic_world.dataset import revision_frame
+
+    assert PHASE_LENGTHS == {"physics": 32, "agency": 32, "causality": 64, "embodiment": 64}
+    assert revision_frame("hidden_correction", 64) > 6
+    config = load_simulation(ROOT / "configs" / "simulation" / "milestone1.yaml")
+    rec = episode_record(config, phase="causality", seed=7, episode_index=0)
+    assert rec["curriculum"] == "mina_6_8b_v03"
+    assert rec["future_diversity"] > 1e-6
+    assert set(rec["counterfactuals"]["strategies"]) == {"WAIT", "MOVE_TO", "FOLLOW", "AVOID"}
+    assert rec["embodiment"]["pwm"] is False
+    assert any(row.get("correction_type") for row in rec["corrections"])
+    follow = episode_record(config, phase="agency", seed=7, episode_index=4, length=8)
+    assert follow["scenario"] == "follow"
+    assert follow["actions"][0]["objective"] == "FOLLOW"
+    long_rec = episode_record(config, phase="causality", seed=7, episode_index=0, length=64)
+    short_rec = episode_record(config, phase="causality", seed=7, episode_index=0, length=8)
+    assert len(long_rec["corrections"]) > len(short_rec["corrections"])
+    kinds = {str(row.get("correction_type")) for row in long_rec["corrections"] if row.get("correction_type")}
+    assert kinds & {"hidden_object", "wrong_intent"}
+
