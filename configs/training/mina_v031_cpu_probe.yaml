@@ -1,0 +1,37 @@
+stage: 0
+name: mina_v031_cpu_probe
+architecture: configs/architecture/cpu_dev.yaml
+simulation: configs/simulation/milestone1.yaml
+dataset_name: stage0_synthetic
+n_overfit_episodes: 8
+
+seed: 7
+steps: 32
+batch_size: 1
+sequence_length: 12
+learning_rate: 0.002
+weight_decay: 0.0
+grad_clip: 1.0
+log_every: 1
+eval_every: 1
+checkpoint_every: 10000
+
+precision: float32
+device: cpu
+sampler_mode: uniform
+
+lambdas:
+  state: 1.0
+  temporal: 1.0
+  future: 0.8
+  uncertainty: 0.3
+  causal: 0.4
+  memory: 0.6
+  action: 0.4
+  representation: 0.05
+  belief: 0.5
+  revision: 1.0
+
+regularizer:
+  isotropic_weight: 0.05
+  counterfactual_margin: 0.25
