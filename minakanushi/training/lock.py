@@ -139,6 +139,7 @@ def lock_baseline(
     run_capability: bool = False,
     write_inference: bool = True,
     require_mina: bool = False,
+    require_dataset: bool = False,
     repo: Path | None = None,
 ) -> dict[str, Any]:
     out_dir = Path(out_dir)
@@ -204,7 +205,18 @@ def lock_baseline(
 
     data_root = Path(dataset_root) if dataset_root else repo / "dataset" / "mina_6_8b_v03"
     from minakanushi.training.curriculum_audit import audit_curriculum
+    from minakanushi.training.v031_dataset import MANIFEST_NAME, READY_NAME, verify_v031_dataset
 
+    require_pack = bool(require_dataset or require_mina)
+    if require_pack:
+        verified = verify_v031_dataset(data_root, profile="v031")
+        report["dataset_verify"] = {
+            "pass": True,
+            "hashes": verified["hashes"],
+            "manifest_sha256": verified["ready"]["manifest_sha256"],
+        }
+        shutil.copyfile(data_root / MANIFEST_NAME, out_dir / MANIFEST_NAME)
+        shutil.copyfile(data_root / READY_NAME, out_dir / READY_NAME)
     if data_root.exists():
         dataset_report = audit_curriculum(data_root, gate=False)
         (out_dir / "dataset_report.json").write_text(
@@ -217,6 +229,8 @@ def lock_baseline(
             encoding="utf-8",
         )
         report["dataset_report"] = {"status": "MISSING"}
+        if require_pack:
+            raise FileNotFoundError(f"v0.3.1 dataset pack missing: {data_root}")
 
     cap_dest = out_dir / "capability_before.json"
     cap_src = Path(capability_path) if capability_path else repo / "artifacts" / "v031" / "capability" / "capability_report.json"

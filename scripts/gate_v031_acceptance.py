@@ -13,7 +13,7 @@ from pathlib import Path
 
 from minakanushi.training.capability import cpu_trainer, gate_c_causality, gate_c_is_honest, gate_e_is_honest, gate_e_memory
 from minakanushi.training.curriculum_audit import audit_curriculum
-from minakanushi.training.heldout import write_heldout_split
+from minakanushi.training.v031_dataset import DatasetContractError, verify_v031_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,9 +31,13 @@ def main() -> None:
     parser.add_argument("--dataset", type=Path, default=ROOT / "dataset" / "mina_6_8b_v03")
     parser.add_argument("--split", type=str, default="heldout")
     parser.add_argument("--out", type=Path, default=ROOT / "artifacts" / "v031" / "acceptance.json")
+    parser.add_argument("--profile", type=str, default="v031")
     args = parser.parse_args()
-    if not (args.dataset / args.split / "index.jsonl").is_file():
-        write_heldout_split(args.dataset)
+    try:
+        verify_v031_dataset(args.dataset, profile=args.profile)
+    except DatasetContractError as exc:
+        print(json.dumps({"pass": False, "failures": exc.failures}, indent=2, sort_keys=True))
+        raise SystemExit("FAIL DATASET CONTRACT: pack not READY (H200 does not repair split)") from exc
     audit = audit_curriculum(args.dataset, gate=False, split=args.split)
     trainer = cpu_trainer(12)
     c = gate_c_causality(trainer)

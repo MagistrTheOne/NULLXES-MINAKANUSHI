@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--run-capability", action="store_true")
     parser.add_argument("--skip-inference", action="store_true")
     parser.add_argument("--require-mina", action="store_true")
+    parser.add_argument("--require-dataset", action="store_true")
     args = parser.parse_args()
     report = lock_baseline(
         args.out,
@@ -35,6 +36,7 @@ def main() -> None:
         run_capability=bool(args.run_capability),
         write_inference=not args.skip_inference,
         require_mina=bool(args.require_mina),
+        require_dataset=bool(args.require_dataset or args.require_mina),
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     passport = Path("artifacts/v031/run_manifest.json")

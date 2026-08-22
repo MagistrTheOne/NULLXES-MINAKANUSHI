@@ -15,7 +15,7 @@ from minakanushi.training.episode_dataset import PHASE_ORDER, scenario_from_epis
 
 HELD_OUT_MOD = 10
 HELD_OUT_REMAINDER = 9
-SKIP_JSON_NAMES = frozenset({"dataset_report.json", "splits.json"})
+SKIP_JSON_NAMES = frozenset({"dataset_report.json", "splits.json", "dataset_manifest.json"})
 SKIP_DIR_NAMES = frozenset({"train", "heldout"})
 
 

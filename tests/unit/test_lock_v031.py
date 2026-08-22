@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from minakanushi.architecture.config import load_simulation, load_training
 from minakanushi.training.lock import lock_baseline
 from simulations.synthetic_world.curriculum_6_8b import write_curriculum
@@ -61,3 +63,21 @@ def test_v03_yaml_is_phase1_stop() -> None:
     assert train.dataset_split == "train"
     assert train.dataset_root.replace("\\", "/").endswith("dataset/mina_6_8b_v03")
     assert train.sampler_mode == "auto"
+
+
+def test_lock_require_dataset_refuses_pack_without_ready(tmp_path: Path) -> None:
+    from minakanushi.training.v031_dataset import DatasetContractError
+
+    config = load_simulation(ROOT / "configs" / "simulation" / "milestone1.yaml")
+    data = tmp_path / "pack"
+    write_curriculum(data, config, seed=7, n_episodes=1, length=8)
+    with pytest.raises(DatasetContractError):
+        lock_baseline(
+            tmp_path / "baseline",
+            mina=None,
+            dataset_root=data,
+            training_config=ROOT / "configs" / "training" / "mina_6_8b_v03.yaml",
+            write_inference=False,
+            require_dataset=True,
+            repo=ROOT,
+        )

@@ -11,6 +11,7 @@ from minakanushi.architecture.config import load_architecture, load_training
 from minakanushi.architecture.freeze import assert_may_construct
 from minakanushi.training.parallel import init_process_group_if_needed
 from minakanushi.training.trainer import trainer_from_files
+from minakanushi.training.v031_dataset import assert_v031_train_dataset
 
 
 def main() -> None:
@@ -21,6 +22,7 @@ def main() -> None:
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     training = load_training(root / args.config)
+    assert_v031_train_dataset(root, training)
     arch = load_architecture(root / training.architecture)
     init_process_group_if_needed(training.parallelism, training.device)
     gpu_name = ""

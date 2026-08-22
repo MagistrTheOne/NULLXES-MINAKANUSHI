@@ -53,22 +53,30 @@ First GPU for this cycle: **1× H200 SXM 141 GB** (same class as v0.1 step64). D
 `minakanushi_stage0_step128.mina` from Hugging Face onto that pod. Do not raise B300
 just to hash a zip. RTX 2080 does not see the 27GB file.
 
-On the laptop, before the pod:
+On the laptop / RTX 2080, before the pod:
 
 ```text
+python scripts/prepare_v031_dataset.py --root dataset/mina_6_8b_v03 --n 250 --seed 11
 python scripts/check_freeze.py
 python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout
 python scripts/register_hf_architecture.py
 ```
 
-On H200 after `hf download`:
+`prepare_v031_dataset.py` is the only production builder (`--n` default 250, `--profile v031`).
+`--profile cpu_dev` is toys. H200 refuses a pack without `.READY_V031` (and refuses cpu_dev markers).
+Copy `dataset/mina_6_8b_v03/` to the pod. Do not generate on H200.
+
+On H200 after `hf download` and the copied pack:
 
 ```text
+python scripts/verify_v031_dataset.py --root dataset/mina_6_8b_v03
 python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --require-mina --out artifacts/v031/baseline
 python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina
 python scripts/export_safetensors.py --mina minakanushi_stage0_step128.mina --out MINAKANUSHI-6.8B
 python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B
 ```
+
+`--require-mina` also requires a verified v0.3.1 dataset pack. `verify` is read-only.
 
 If git is dirty, `git_status.json` must say whether **code** is dirty or only
 `dataset/` / `artifacts/`. Code must be unambiguous before H200.

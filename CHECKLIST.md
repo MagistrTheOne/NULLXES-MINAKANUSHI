@@ -106,26 +106,34 @@ HF артефакт: [MagistrTheOne/MINAKANUSHI-6.8B](https://huggingface.co/Mag
 Конфиг: `configs/training/mina_6_8b_v03.yaml` (`steps: 1000`, `eval_every: 50`, `checkpoint_every: 250`, `dataset_split: train`)
 
 ```text
-сервер со step128 (HF → H200)
+RTX 2080 / CPU
+  prepare_v031_dataset  →  .READY_V031
+        ↓ COPY pack
+H200
+  verify only
         ↓
-lock baseline
+  lock baseline + step128
         ↓
-export safetensors + HF reload
+  export safetensors
         ↓
-CPU gate (честность C/E)
+  1000 STOP
         ↓
-check_freeze --checkpoint
+  compare ledger
         ↓
-H200 1000 steps STOP
-        ↓
-compare ledger
-        ↓
-вердикт A / B / C
+  вердикт A / B / C
 ```
 
 ### Ещё открыто (только это)
 
-- [ ] **Phase 0. Lock baseline** — на H200, после `hf download`  
+- [ ] **Phase −1. Dataset pack** — ноут / 2080, не H200  
+  `python scripts/prepare_v031_dataset.py --root dataset/mina_6_8b_v03 --n 250 --seed 11`  
+  Default `--n=250`, `--profile v031`. `n<250` на production — FAIL. Dev: `--profile cpu_dev`.  
+  После PASS: `dataset_manifest.json` + `.READY_V031`. Копировать **всю папку** на H200.  
+  `train.py` / `mina_6_8b_v03.yaml` без marker — refuse. H200 split не дописывает.
+
+- [ ] **Phase 0. Lock baseline** — на H200, после `hf download` и copy pack  
+  `python scripts/verify_v031_dataset.py --root dataset/mina_6_8b_v03`  
+  (read-only: не generate, не split)  
   `python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --require-mina --out artifacts/v031/baseline`  
   `python scripts/check_freeze.py --checkpoint minakanushi_stage0_step128.mina`  
   Точка невозврата: `checkpoint.sha256` + metrics + capability_before + dataset_report + training_config + hardware + git_commit.
@@ -135,9 +143,9 @@ compare ledger
   `python scripts/test_hf_reload.py --path MINAKANUSHI-6.8B`  
   Гейт: load tensor · shape match · **6799130646** · AutoModel type tag · **AutoModelForCausalLM absent**.
 
-- [ ] **Phase 2. CPU contract** — не обучение  
-  На ноуте/2080 (датасет), не 6.8B:  
+- [ ] **Phase 2. CPU contract** — ноут/2080 после prepare, не обучение  
   `python scripts/gate_v031_acceptance.py --dataset dataset/mina_6_8b_v03 --split heldout`  
+  Без `.READY_V031` — FAIL, split не дописывается.  
   Ожидание до H200: C/E **честно FAIL** (`revision_detected = 0`, ADE memory on ≮ off). Это baseline, не сломанный скрипт.
 
 - [ ] **Phase 3. H200 1000 steps STOP**  

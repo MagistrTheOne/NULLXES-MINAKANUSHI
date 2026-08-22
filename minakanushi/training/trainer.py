@@ -729,8 +729,10 @@ def _diagnose_run(logs: list[TrainLog]) -> str | None:
 
 def trainer_from_files(root: Path, training_yaml: Path) -> Trainer:
     from minakanushi.architecture.config import load_training
+    from minakanushi.training.v031_dataset import assert_v031_train_dataset
 
     training = load_training(training_yaml)
+    assert_v031_train_dataset(root, training)
     config = load_config(
         root / training.architecture,
         training_path=training_yaml,
