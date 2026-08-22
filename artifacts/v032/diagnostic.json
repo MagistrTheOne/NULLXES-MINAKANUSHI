@@ -1,0 +1,49 @@
+{
+  "aggregates_note": {
+    "mean": 0.0007857031049206853,
+    "median": 0.0007857031049206853,
+    "n": 1.0,
+    "p90": 0.0007857031049206853,
+    "worst10": 0.0007857031049206853
+  },
+  "constructs_6_8b": false,
+  "cycle": "v0.3.2-diagnostic",
+  "embodiment": {
+    "reason": "no --verdict",
+    "status": "skipped"
+  },
+  "metric": {
+    "claim": "official cf is mean L2 over every world slot, including empty ones.",
+    "expected_official": 0.00078125,
+    "fork": "A",
+    "matches_identity": true,
+    "next": "fix acceptance metric to occupied/agent cf, rerun heldout-100, no train",
+    "synthetic": {
+      "agent_cf": 0.4000000059604645,
+      "empty_slot_collapse": 1.0,
+      "frobenius": 0.4000000059604645,
+      "n_occupied": 1.0,
+      "n_slots": 512.0,
+      "occupied_cf": 0.4000000059604645,
+      "official_cf": 0.0007812500116415322
+    },
+    "synthetic_official": 0.0007812500116415322,
+    "v031_ledger": {
+      "frobenius_over_official": 509.7871792900945,
+      "future_engine_frobenius": 0.40054136961698533,
+      "identity_holds": true,
+      "official_cf_mean": 0.0007857031049206853,
+      "official_cf_std": 3.3952208637715273e-06,
+      "recovered_agent_mean": 0.4022799897193909,
+      "recovered_agent_std": 0.001738353082251022,
+      "recovered_diversity_would_pass": true,
+      "slots": 512.0
+    }
+  },
+  "official_std": 2.4007836963988772e-06,
+  "sampler": {
+    "reason": "no --dataset",
+    "status": "skipped"
+  },
+  "trains": false
+}

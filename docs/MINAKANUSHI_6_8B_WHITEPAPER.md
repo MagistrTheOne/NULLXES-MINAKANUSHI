@@ -223,6 +223,8 @@ WAIT vs MOVE_TO on one world state (n=100):
 
 ActionIntent reaches the Future Engine. The failed gate is the **terminal score diversity**, not a missing action vector. Trajectory and relation already move; the official `cf` number does not.
 
+Metric identity (v0.3.2 diagnostic, CPU): `official_cf = mean L2 over 512 slots`. Empty slots dilute a real agent move: `0.40054 / 512 ≈ 0.000782 ≈ 0.000786`. Recovered agent std `3.4e-6 × 512 ≈ 0.0017` would pass the diversity gate. Fork A: fix the acceptance metric, do not train. Script: `scripts/diagnose_counterfactual_v031.py`. Plan: `docs/V032_DIAGNOSTIC.md`.
+
 Revision slices (step1128):
 
 | Slice | n | detect | direction | false rev |

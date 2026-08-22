@@ -28,7 +28,7 @@ from minakanushi.architecture.freeze import is_6_8b_profile
 from minakanushi.state.entity import AGENT_SLOT
 from minakanushi.training.checkpoint import load_mina
 from minakanushi.training.episode_dataset import JsonEpisodeDataset
-from minakanushi.training.metrics import counterfactual_separation_score
+from minakanushi.training.metrics import counterfactual_layers, counterfactual_separation_score
 from minakanushi.training.trainer import Trainer, UnrollPacket
 from minakanushi.training.v031_dataset import assert_v031_train_dataset
 
@@ -102,6 +102,7 @@ def intervention_deltas(pkt: UnrollPacket) -> dict[str, Any]:
     alt = pkt.alt_future[0]
     occ = pkt.aligned_occ[0].to(labeled.dtype).unsqueeze(-1)
     term = float(counterfactual_separation_score(labeled[-1], alt[-1]).detach())
+    layers = counterfactual_layers(labeled[-1], alt[-1], pkt.aligned_occ[0])
     traj = float((((labeled - alt).pow(2) * occ.unsqueeze(0)).sum() / occ.sum().clamp_min(1.0) / labeled.shape[0]).sqrt().detach())
     rel_a = _pairwise(labeled[-1], pkt.aligned_occ[0])
     rel_b = _pairwise(alt[-1], pkt.aligned_occ[0])
@@ -109,6 +110,9 @@ def intervention_deltas(pkt: UnrollPacket) -> dict[str, Any]:
     event = float((labeled[-1] - alt[-1]).abs().mean().detach())
     return {
         "terminal_delta": term,
+        "occupied_terminal": float(layers["occupied_cf"].detach()),
+        "agent_terminal": float(layers["agent_cf"].detach()),
+        "frobenius_terminal": float(layers["frobenius"].detach()),
         "trajectory_delta": traj,
         "relation_delta": relation,
         "event_delta": event,
@@ -144,9 +148,13 @@ def action_trace(trainer: Trainer, pkt: UnrollPacket) -> dict[str, float]:
     fw = next(t.states_xy for t in fut if t.strategy_id == wait.strategy_id)
     fm = next(t.states_xy for t in fut if t.strategy_id == move.strategy_id)
     future_delta = float(torch.linalg.vector_norm(fw[-1] - fm[-1]).mean().detach())
+    layers = counterfactual_layers(fw[-1], fm[-1])
     return {
         "action_vector_delta": action_delta,
         "future_terminal_delta": future_delta,
+        "official_cf": float(layers["official_cf"].detach()),
+        "agent_cf": float(layers["agent_cf"].detach()),
+        "frobenius": float(layers["frobenius"].detach()),
         "signal_reaches_future": action_delta > 1e-6,
         "future_uses_action": future_delta > 1e-3,
     }
@@ -252,17 +260,26 @@ def _memory_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _cf_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
     term = [float(r["terminal_delta"]) for r in rows]
+    occupied = [float(r["occupied_terminal"]) for r in rows if "occupied_terminal" in r]
+    agent = [float(r["agent_terminal"]) for r in rows if "agent_terminal" in r]
     traj = [float(r["trajectory_delta"]) for r in rows]
     rel = [float(r["relation_delta"]) for r in rows]
+    gate = occupied or term
+    gated_on = "occupied" if occupied else "official"
     return {
         "terminal": summarize(term),
+        "occupied": summarize(occupied) if occupied else None,
+        "agent": summarize(agent) if agent else None,
         "trajectory": summarize(traj),
         "relation": summarize(rel),
         "std_terminal": _std(term),
-        "existence": bool(term) and max(term) > 1e-4,
-        "diversity": bool(term) and _std(term) > 1e-4,
-        "pass_existence": bool(term) and max(term) > 1e-4,
-        "pass_diversity": bool(term) and _std(term) > 1e-4,
+        "std_occupied": _std(occupied) if occupied else None,
+        "gated_on": gated_on,
+        "existence": bool(gate) and max(gate) > 1e-4,
+        "diversity": bool(gate) and _std(gate) > 1e-4,
+        "pass_existence": bool(gate) and max(gate) > 1e-4,
+        "pass_diversity": bool(gate) and _std(gate) > 1e-4,
+        "official_diversity_failed": bool(term) and _std(term) <= 1e-4,
     }
 
 

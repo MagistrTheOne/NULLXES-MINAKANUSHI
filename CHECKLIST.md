@@ -148,6 +148,15 @@ H200
 
 ---
 
+## v0.3.2 diagnostic-fix (не train)
+
+План: `docs/V032_DIAGNOSTIC.md`
+
+- [x] `python scripts/diagnose_counterfactual_v031.py` — CPU **fork A**: official cf = agent/512 · recovered Δ ≈ 0.402 · recovered std ≈ 0.0017
+- [ ] sampler replay на train index (`--dataset dataset/mina_6_8b_v03`) — сколько steps увидели gone_forever / sensor_delay
+- [ ] embodiment rows (`--verdict step1128.json`) — sensor_delay vs agent_move; gone_forever n=3 не трогать global loss
+- [ ] heldout-100 **без обучения** только после occupied/agent gate; v0.4 только после A
+
 ## Не этот цикл
 
 Длинный 6.8B, pixels → MinaUnit, органы, другие тела — не этот отчёт. v0.4 (geometry) только после A. Сейчас B: не открывать параллельный train.

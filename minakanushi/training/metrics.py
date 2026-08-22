@@ -177,7 +177,57 @@ def action_influence_score(future_a: Tensor, future_b: Tensor, mask: Tensor) -> 
 
 
 def counterfactual_separation_score(future_a: Tensor, future_b: Tensor) -> Tensor:
+    """Historical official cf: mean per-slot L2 over every world slot.
+
+    Empty slots dilute a real agent delta: 0.40 / 512 ≈ 0.00078. That is
+    v0.3.1's C-signal. Occupied / agent scores live in counterfactual_layers.
+    """
     return torch.linalg.vector_norm(future_a - future_b, dim=-1).mean()
+
+
+def counterfactual_layers(
+    future_a: Tensor,
+    future_b: Tensor,
+    occupied: Tensor | None = None,
+    *,
+    agent_slot: int = 0,
+) -> dict[str, Tensor]:
+    """Split official cf into the layers that v0.3.1 mixed together.
+
+    future_* : [N, 2] terminal or [T, N, 2] (uses last step).
+    """
+    if future_a.ndim == 3:
+        future_a = future_a[-1]
+        future_b = future_b[-1]
+    if future_a.shape != future_b.shape or future_a.ndim != 2 or future_a.shape[-1] != 2:
+        raise ValueError(f"expected [N,2] terminals, got {tuple(future_a.shape)} vs {tuple(future_b.shape)}")
+    delta = future_a - future_b
+    per_slot = torch.linalg.vector_norm(delta, dim=-1)
+    official = per_slot.mean()
+    frobenius = torch.linalg.vector_norm(delta)
+    if agent_slot < 0 or agent_slot >= per_slot.shape[0]:
+        raise ValueError(f"agent_slot={agent_slot} out of range for {per_slot.shape[0]} slots")
+    agent = per_slot[agent_slot]
+    n_slots = per_slot.new_tensor(float(per_slot.numel()))
+    if occupied is None:
+        occupied_cf = official
+        n_occupied = n_slots
+    else:
+        mask = occupied.reshape(-1).to(dtype=per_slot.dtype)
+        if mask.numel() != per_slot.numel():
+            raise ValueError(f"occupied {tuple(occupied.shape)} != slots {per_slot.shape[0]}")
+        occupied_cf = (per_slot * mask).sum() / mask.sum().clamp_min(1.0)
+        n_occupied = mask.sum()
+    collapse = official * n_slots / agent.clamp_min(1e-12)
+    return {
+        "official_cf": official,
+        "occupied_cf": occupied_cf,
+        "agent_cf": agent,
+        "frobenius": frobenius,
+        "n_slots": n_slots,
+        "n_occupied": n_occupied,
+        "empty_slot_collapse": collapse,
+    }
 
 
 def causal_consistency_score(agent_delta: Tensor, other_delta: Tensor) -> Tensor:
