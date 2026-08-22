@@ -111,7 +111,9 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
   `python scripts/gate_v031_export.py --mina probe.mina --out artifacts/v031/hf_probe`  
   `python scripts/gate_v031_validate.py --root dataset/mina_6_8b_v03 --n 100`  
   `python scripts/gate_v031_loss_probe.py --steps 32`  
-  H200 только после якоря + resume replay + sampler + CPU probe.
+  `python scripts/gate_capability.py --out artifacts/v031/capability`  
+  H200 только после якоря + resume replay + sampler + CPU probe + capability protocol.  
+  После train: held-out (Gate B) → обновить `docs/MINA_CAPABILITY_LEDGER.md` из цифр, не из loss.
 
 ---
 

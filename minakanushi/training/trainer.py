@@ -229,7 +229,15 @@ class Trainer:
             return mode_for_job_step(job, warm_steps=self.config.training.warm_steps)
         return mode
 
-    def _load_episode(self, step: int, *, scenario: str | None, episode_index: int | None):
+    def _load_episode(
+        self,
+        step: int,
+        *,
+        scenario: str | None,
+        episode_index: int | None,
+        seed: int | None = None,
+        length: int | None = None,
+    ):
         train = self.config.training
         arch = self.config.architecture
         if self.dataset is not None:
@@ -248,9 +256,9 @@ class Trainer:
         scenario_name = scenario or TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
         return generate_episode(
             self.config.simulation,
-            seed=train.seed,
+            seed=int(seed) if seed is not None else train.seed,
             episode_index=ep_idx,
-            length=train.sequence_length,
+            length=int(length) if length is not None else train.sequence_length,
             horizon=arch.prediction_horizons.short,
             scenario=scenario_name,
         )
@@ -282,10 +290,20 @@ class Trainer:
         _, core = self.system.observe_to_core(packed, constructed, hints)
         return pos, hints, constructed, core
 
-    def unroll(self, step: int, *, scenario: str | None = None, episode_index: int | None = None) -> UnrollPacket:
+    def unroll(
+        self,
+        step: int,
+        *,
+        scenario: str | None = None,
+        episode_index: int | None = None,
+        seed: int | None = None,
+        length: int | None = None,
+    ) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
-        episode = self._load_episode(step, scenario=scenario, episode_index=episode_index)
+        episode = self._load_episode(
+            step, scenario=scenario, episode_index=episode_index, seed=seed, length=length
+        )
         ep_idx = int(episode.episode_index)
         idx = training_frame(episode.scenario, len(episode.observations))
         obs = episode.observations[idx]

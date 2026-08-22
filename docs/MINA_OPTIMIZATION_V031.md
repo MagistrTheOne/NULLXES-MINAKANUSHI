@@ -6,11 +6,11 @@ Do not touch DWC, latent_dim, slots, world state, loss architecture, or layers.
 
 ```text
 1. Freeze step128          scripts/freeze_step128.py
-2. Resume replay           scripts/audit_resume.py + tests/unit/test_resume_replay.py
+2. Resume replay           scripts/audit_resume.py
 3. HF safetensors test     scripts/gate_v031_export.py
-4. Curriculum sampler      sampler_mode: auto in mina_6_8b_v03.yaml
-5. 100-episode validation  scripts/gate_v031_validate.py
-6. H200 full training      only after 1–5
+4. 100-episode validation  scripts/gate_v031_validate.py
+5. Capability protocol     scripts/gate_capability.py  + docs/MINA_CAPABILITY_LEDGER.md
+6. H200 full training      only after 1–5, then held-out eval, then ledger update
 ```
 
 ## Gate 0 — baseline

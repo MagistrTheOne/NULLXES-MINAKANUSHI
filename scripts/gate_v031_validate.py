@@ -44,11 +44,15 @@ def main() -> None:
         "pwm": pwm,
         "future_diversity_positive": diversity,
         "warm_steps": int(args.warm_steps),
+        "not_a_claim": "100-episode mix check is data hygiene, not intelligence appeared",
         "pass": (not pwm) and diversity == int(args.n) and set(counts) == {"physics", "agency", "causality", "embodiment"},
     }
-    if not report["pass"]:
-        raise SystemExit(json.dumps(report, indent=2))
+    out = ROOT / "artifacts" / "v031" / "validation_100.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
+    if not report["pass"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
