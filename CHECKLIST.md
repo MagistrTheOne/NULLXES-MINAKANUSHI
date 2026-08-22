@@ -143,19 +143,29 @@ H200
 | | Что видим | Что делать |
 |---|---|---|
 | **A** | revision ↑ · memory ADE on < off · heldout ADE ↓ · false_revision ≈ 0 | v0.3.1 PASS → следующий цикл: geometry / long horizon |
-| **B** ← факт | heldout ADE ↓ · memory PASS · direction ↑ · detection ↓ · **cf diversity FAIL** | action-conditioning / sampler / scenarios. **Не слои. Не ещё 1000 steps.** |
+| **B** ← факт | heldout ADE ↓ · memory PASS · occupied cf PASS · direction ↑ · detection ↓ (`sensor_delay`) | revision trigger calibration. **Не слои. Не ещё 1000 steps. Не v0.4.** |
 | **C** | revision ломается · false_revision растёт | чинить causality в данных/лоссе. **Не слои.** |
 
 ---
 
-## v0.3.2 diagnostic-fix (не train)
+## v0.3.2 diagnostic-fix (закрыт, не train)
 
 План: `docs/V032_DIAGNOSTIC.md`
 
 - [x] `python scripts/diagnose_counterfactual_v031.py` — CPU **fork A**: official cf = agent/512 · recovered Δ ≈ 0.402 · recovered std ≈ 0.0017
-- [ ] sampler replay на train index (`--dataset dataset/mina_6_8b_v03`) — сколько steps увидели gone_forever / sensor_delay
-- [ ] embodiment rows (`--verdict step1128.json`) — sensor_delay vs agent_move; gone_forever n=3 не трогать global loss
-- [ ] heldout-100 **без обучения** только после occupied/agent gate; v0.4 только после A
+- [x] sampler replay 129..1128 — WAIT/MOVE 1000/1000; sensor_delay 45; gone_forever 49. Sampler не bottleneck
+- [x] embodiment: `sensor_delay` detect **0.00** (n=13); correction L1–L3 / conflict detect 1.0. gone_forever n=3 не трогать global loss
+- [x] occupied heldout-100 **без обучения** — existence/diversity PASS; variant всё ещё **B** (detection 0.85 → 0.64)
+
+## v0.3.1-R Revision Trigger Diagnostic (не train)
+
+План: `docs/V031R_REVISION.md`
+
+Оставшийся дефект — не counterfactual и не memory. Калибровка кнопки «пересмотреть belief», особенно `sensor_delay`.
+
+- [x] CPU forensic: delay = timestamp; train frame = `length//2` без mover; one-step и delay-path < `0.25`; empty teacher → detected=0
+- [ ] H200 live dump `max_before_d` step128 vs step1128 **только sensor_delay heldout** (`scripts/diagnose_revision_v031r.py`)
+- [ ] локальный патч teacher/метрики — только после live cut-point. **Не общий train. Не v0.4.**
 
 ## Не этот цикл
 

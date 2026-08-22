@@ -237,7 +237,7 @@ Revision slices (step1128):
 
 Train-log `revision_direction ≈ 0` is not the heldout fact. Detection dropped because embodiment mean went to 0.24; correction slices stayed honest.
 
-Next cycle, if any: data / sampler / action-conditioning metric — not new layers, not more 1000 steps on the same loss.
+Next cycle is **v0.3.1-R**, not v0.4: revision-trigger calibration on `sensor_delay` (`docs/V031R_REVISION.md`). Occupied counterfactual already exists. Do not open a new general train until the live `max_before_d` dump says where the teacher is cut.
 
 ---
 

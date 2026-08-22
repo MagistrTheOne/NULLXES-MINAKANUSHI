@@ -75,15 +75,13 @@ python scripts/gate_v031_h200_verdict.py \
 
 Sampler RNG is global step `129..1128`. Mode is job `1..1000`. Replay of `1..1000` is the wrong experiment.
 
-## GO / NO-GO after occupied heldout-100
+## Occupied heldout-100 — done
 
-GO without train if occupied diversity PASS, memory PASS, heldout ADE still down, revision direction ≥ 0.2, false revision ≤ 0.1.
+Occupied existence/diversity PASS. Memory PASS. Heldout ADE still down. Official all-slot `cf` stays a log artifact.
 
-Then v0.3.1 is **B caused by metric artifact** (or A if the frozen gate closes).
+Acceptance stays **B**: revision detection dropped. Next page is `docs/V031R_REVISION.md`, not another 1000 steps.
 
-NO-GO on acceptance if `cf_occupied` / `cf_agent` still FAIL. Only then targeted v0.3.2 train from step1128.
-
-Weights stay `step1128.mina`. Card stays research until the occupied ledger says A.
+Weights stay `step1128.mina`. Card stays research.
 
 ## Embodiment (do not touch global objective)
 
