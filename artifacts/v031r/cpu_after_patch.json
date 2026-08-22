@@ -1,0 +1,275 @@
+{
+  "constructs_6_8b": false,
+  "cpu_verdict": {
+    "accepted": false,
+    "cpu_patch_pass": true,
+    "delay_is_timestamp_only": true,
+    "early_frame_has_mover": true,
+    "empty_teacher_not_missed_detection": true,
+    "mover_evidence_at_train_frame": true,
+    "next": "CPU patch PASS \u2192 H200 live_after_patch on the same step1128.mina. Do not train.",
+    "sensor_delay_frame": 2,
+    "sensor_delay_frame_not_mid": true,
+    "variant": "B"
+  },
+  "cut_points": [
+    "A. sensor_delay trains/evals curriculum frame 2, not length//2.",
+    "B. n_need==0 is excluded from revision_required_recall.",
+    "C. delay teacher is mover-only; leftover obstacle residual is not a target.",
+    "D. REVISION_MAGNITUDE stays 0.25. Weights stay step1128.mina."
+  ],
+  "cycle": "v0.3.1-R",
+  "generated": {
+    "early_mover_visible_rate": 1.0,
+    "early_teacher_if_oracle_prev_rate": 0.0,
+    "length": 32,
+    "mean_delay_path": 0.09486832980505137,
+    "mean_step": 0.06324555320336722,
+    "n": 3,
+    "obs_is_current_xy_rate": 1.0,
+    "rows": [
+      {
+        "arrival_time": 0.35,
+        "below_revision_magnitude": {
+          "delay_path": true,
+          "one_step": true
+        },
+        "constructor_note": "At the early delay frame the mover is visible and consecutive, so revise_slot uses tracking. The trained frame is length//2; the mover has usually left sensor range, so the teacher sees only static evidence.",
+        "constructor_path": "tracking",
+        "correction_frame_named": true,
+        "cut": "teacher_below_threshold",
+        "delay_path": 0.09486832980505136,
+        "delay_s": 0.14999999999999997,
+        "dt": 0.1,
+        "early": {
+          "below_revision_magnitude": {
+            "delay_path": true,
+            "one_step": true
+          },
+          "delay_path": 0.09486832980505136,
+          "delay_s": 0.14999999999999997,
+          "entity_id": 11,
+          "frame": 2,
+          "mover_in_observation": true,
+          "n_visible_movers": 1,
+          "obs_vs_truth_now": 0.062472578161535994,
+          "speed": 0.6324555320336759,
+          "teacher_if_belief_is_truth_prev": false,
+          "teacher_if_belief_vs_delay_stale": false,
+          "truth_step": 0.06324555320336722,
+          "visible": [
+            [
+              11,
+              "mover"
+            ],
+            [
+              22,
+              "obstacle"
+            ]
+          ],
+          "visible_xy_is_current": true
+        },
+        "early_delay_frame": 2,
+        "entity_id": 11,
+        "event_time": 0.2,
+        "frame": 2,
+        "last_mover_visible_frame": 5,
+        "length": 32,
+        "mover_in_observation": true,
+        "n_visible_movers": 1,
+        "obs_is_current_xy": true,
+        "obs_vs_truth_now": 0.062472578161535994,
+        "scenario": "sensor_delay",
+        "speed": 0.6324555320336759,
+        "teacher_if_belief_is_truth_now": false,
+        "teacher_if_belief_is_truth_prev": false,
+        "teacher_if_belief_vs_delay_stale": false,
+        "train_frame_after_mover_left": false,
+        "training_frame": 2,
+        "truth_step": 0.06324555320336722,
+        "visible": [
+          [
+            11,
+            "mover"
+          ],
+          [
+            22,
+            "obstacle"
+          ]
+        ],
+        "visible_xy_is_current": true
+      },
+      {
+        "arrival_time": 0.35,
+        "below_revision_magnitude": {
+          "delay_path": true,
+          "one_step": true
+        },
+        "constructor_note": "At the early delay frame the mover is visible and consecutive, so revise_slot uses tracking. The trained frame is length//2; the mover has usually left sensor range, so the teacher sees only static evidence.",
+        "constructor_path": "tracking",
+        "correction_frame_named": true,
+        "cut": "teacher_below_threshold",
+        "delay_path": 0.09486832980505136,
+        "delay_s": 0.14999999999999997,
+        "dt": 0.1,
+        "early": {
+          "below_revision_magnitude": {
+            "delay_path": true,
+            "one_step": true
+          },
+          "delay_path": 0.09486832980505136,
+          "delay_s": 0.14999999999999997,
+          "entity_id": 11,
+          "frame": 2,
+          "mover_in_observation": true,
+          "n_visible_movers": 1,
+          "obs_vs_truth_now": 0.15082223167292255,
+          "speed": 0.6324555320336759,
+          "teacher_if_belief_is_truth_prev": false,
+          "teacher_if_belief_vs_delay_stale": false,
+          "truth_step": 0.06324555320336722,
+          "visible": [
+            [
+              11,
+              "mover"
+            ],
+            [
+              22,
+              "obstacle"
+            ]
+          ],
+          "visible_xy_is_current": true
+        },
+        "early_delay_frame": 2,
+        "entity_id": 11,
+        "event_time": 0.2,
+        "frame": 2,
+        "last_mover_visible_frame": 5,
+        "length": 32,
+        "mover_in_observation": true,
+        "n_visible_movers": 1,
+        "obs_is_current_xy": true,
+        "obs_vs_truth_now": 0.15082223167292255,
+        "scenario": "sensor_delay",
+        "speed": 0.6324555320336759,
+        "teacher_if_belief_is_truth_now": false,
+        "teacher_if_belief_is_truth_prev": false,
+        "teacher_if_belief_vs_delay_stale": false,
+        "train_frame_after_mover_left": false,
+        "training_frame": 2,
+        "truth_step": 0.06324555320336722,
+        "visible": [
+          [
+            11,
+            "mover"
+          ],
+          [
+            22,
+            "obstacle"
+          ]
+        ],
+        "visible_xy_is_current": true
+      },
+      {
+        "arrival_time": 0.35,
+        "below_revision_magnitude": {
+          "delay_path": true,
+          "one_step": true
+        },
+        "constructor_note": "At the early delay frame the mover is visible and consecutive, so revise_slot uses tracking. The trained frame is length//2; the mover has usually left sensor range, so the teacher sees only static evidence.",
+        "constructor_path": "tracking",
+        "correction_frame_named": true,
+        "cut": "teacher_below_threshold",
+        "delay_path": 0.09486832980505136,
+        "delay_s": 0.14999999999999997,
+        "dt": 0.1,
+        "early": {
+          "below_revision_magnitude": {
+            "delay_path": true,
+            "one_step": true
+          },
+          "delay_path": 0.09486832980505136,
+          "delay_s": 0.14999999999999997,
+          "entity_id": 11,
+          "frame": 2,
+          "mover_in_observation": true,
+          "n_visible_movers": 1,
+          "obs_vs_truth_now": 0.13354967074990645,
+          "speed": 0.6324555320336759,
+          "teacher_if_belief_is_truth_prev": false,
+          "teacher_if_belief_vs_delay_stale": false,
+          "truth_step": 0.06324555320336722,
+          "visible": [
+            [
+              11,
+              "mover"
+            ],
+            [
+              22,
+              "obstacle"
+            ]
+          ],
+          "visible_xy_is_current": true
+        },
+        "early_delay_frame": 2,
+        "entity_id": 11,
+        "event_time": 0.2,
+        "frame": 2,
+        "last_mover_visible_frame": 5,
+        "length": 32,
+        "mover_in_observation": true,
+        "n_visible_movers": 1,
+        "obs_is_current_xy": true,
+        "obs_vs_truth_now": 0.13354967074990645,
+        "scenario": "sensor_delay",
+        "speed": 0.6324555320336759,
+        "teacher_if_belief_is_truth_now": false,
+        "teacher_if_belief_is_truth_prev": false,
+        "teacher_if_belief_vs_delay_stale": false,
+        "train_frame_after_mover_left": false,
+        "training_frame": 2,
+        "truth_step": 0.06324555320336722,
+        "visible": [
+          [
+            11,
+            "mover"
+          ],
+          [
+            22,
+            "obstacle"
+          ]
+        ],
+        "visible_xy_is_current": true
+      }
+    ],
+    "source": "generate_episode",
+    "teacher_if_oracle_prev_rate": 0.0,
+    "train_frame_no_mover_rate": 0.0
+  },
+  "heldout_geometry": {
+    "reason": "no --dataset",
+    "status": "skipped"
+  },
+  "metric_identity": {
+    "claim": "empty teacher is not a missed revision. Only false_revision is scored.",
+    "excluded_from_detection": true,
+    "false_revision_rate": 0.0,
+    "n_detected": 0,
+    "n_false_revision": 0,
+    "n_need": 0,
+    "n_no_need": 1,
+    "revision_detected": null
+  },
+  "thresholds": {
+    "motor_delay_s": 0.3,
+    "move_detect": 0.05,
+    "revision_magnitude": 0.25,
+    "sensor_delay_s": 0.15
+  },
+  "title": "Revision Trigger Diagnostic",
+  "trains": false,
+  "verdict_compare": {
+    "reason": "need --before-verdict and --after-verdict",
+    "status": "skipped"
+  }
+}
