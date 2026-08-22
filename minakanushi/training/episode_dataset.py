@@ -34,13 +34,13 @@ class JsonEpisodeDataset:
             raise FileNotFoundError(f"dataset root missing: {self.root}")
         self.seed = int(seed)
         self.curriculum_6_8b = bool(curriculum_6_8b)
-        self.paths, self.scenarios = self._index_rows()
+        self.paths, self.scenarios, self.phases = self._index_rows()
         if not self.paths:
             raise FileNotFoundError(f"no episode JSON under {self.root}")
 
-    def _index_rows(self) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+    def _index_rows(self) -> tuple[tuple[Path, ...], tuple[str, ...], tuple[str, ...]]:
         index = self.root / "index.jsonl"
-        rows: list[tuple[Path, str]] = []
+        rows: list[tuple[Path, str, str]] = []
         if index.is_file():
             for line in index.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
@@ -48,15 +48,21 @@ class JsonEpisodeDataset:
                 rec = json.loads(line)
                 path = self.root / rec["path"]
                 scenario = str(rec["scenario"]) if rec.get("scenario") else scenario_from_episode_id(path.stem)
-                rows.append((path, scenario))
-            return tuple(p for p, _ in rows), tuple(s for _, s in rows)
+                phase = str(rec.get("phase") or path.parent.name)
+                rows.append((path, scenario, phase))
+            return (
+                tuple(p for p, _, _ in rows),
+                tuple(s for _, s, _ in rows),
+                tuple(ph for _, _, ph in rows),
+            )
         found = sorted(self.root.rglob("*.json"))
         found = [p for p in found if p.name not in {"dataset_report.json", "index.jsonl"}]
         rng = np.random.default_rng(self.seed)
         order = np.arange(len(found))
         rng.shuffle(order)
         ordered = tuple(found[int(i)] for i in order)
-        return ordered, tuple(scenario_from_episode_id(path.stem) for path in ordered)
+        phases = tuple(path.parent.name if path.parent.name in PHASE_ORDER else "physics" for path in ordered)
+        return ordered, tuple(scenario_from_episode_id(path.stem) for path in ordered), phases
 
     def __len__(self) -> int:
         return len(self.paths)

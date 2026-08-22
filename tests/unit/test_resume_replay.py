@@ -1,51 +1,62 @@
-"""Resume continues the same run: optimizer + RNG + cursor, not a weight clone."""
+"""Resume must continue the same pupil, not clone weights into a fresh Adam."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
 
+import torch
+
 from minakanushi.architecture.config import load_config
-from minakanushi.training.checkpoint import latest_mina
 from minakanushi.training.trainer import Trainer
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _cfg(steps: int, checkpoint_every: int):
+def _cpu_trainer(**training_kw) -> Trainer:
     cfg = load_config(
         ROOT / "configs" / "architecture" / "cpu_dev.yaml",
         training_path=ROOT / "configs" / "training" / "stage0_overfit.yaml",
         runtime_path=ROOT / "configs" / "runtime" / "cpu.yaml",
         simulation_path=ROOT / "configs" / "simulation" / "milestone1.yaml",
     )
-    return replace(
-        cfg,
-        training=replace(
-            cfg.training,
-            steps=steps,
-            checkpoint_every=checkpoint_every,
-            eval_every=1000,
-            log_every=1000,
-            n_overfit_episodes=8,
-            sequence_length=6,
-        ),
-    )
+    train = replace(cfg.training, steps=1, eval_every=1, checkpoint_every=1, log_every=1, **training_kw)
+    return Trainer(replace(cfg, training=train), ROOT)
 
 
-def test_resume_step11_matches_continuous(tmp_path: Path) -> None:
-    continuous = Trainer(_cfg(11, 11), ROOT)
-    cont_logs = continuous.fit(tmp_path / "cont")
-    cont11 = next(x for x in cont_logs if x.step == 11)
+def _first_moment(opt) -> torch.Tensor:
+    param = next(iter(opt.param_groups[0]["params"]))
+    return opt.state[param]["exp_avg"].detach().clone()
 
-    first = Trainer(_cfg(10, 10), ROOT)
-    first.fit(tmp_path / "seg")
-    ckpt = latest_mina(tmp_path / "seg")
-    resumed = Trainer(_cfg(1, 1), ROOT)
-    logs = resumed.fit(tmp_path / "resume", resume=ckpt)
-    assert resumed.start_step == 11
-    assert logs[0].step == 11
-    assert abs(logs[0].loss - cont11.loss) < 1e-4
-    assert abs(logs[0].grad_norm - cont11.grad_norm) < 1e-3
-    assert resumed._resume_extras.get("identity_initialized") is True
-    assert resumed._resume_extras.get("identity_trainable") is False
+
+def test_resume_replays_optimizer_scheduler_cursor(tmp_path: Path) -> None:
+    first = _cpu_trainer()
+    first.fit(tmp_path / "run")
+    mina = tmp_path / "run" / "minakanushi_stage0_step1.mina"
+    assert mina.is_file()
+    moment = _first_moment(first.opt)
+    sched = first.scheduler.step_num
+
+    continued = _cpu_trainer()
+    continued.resume_from(mina)
+    assert continued.start_step == 2
+    assert continued.dataset_cursor == 1
+    assert continued.scheduler.step_num == sched
+    assert torch.allclose(_first_moment(continued.opt), moment)
+
+    again = _cpu_trainer()
+    again.resume_from(mina)
+    log_a = continued.step_once(2)
+    log_b = again.step_once(2)
+    assert abs(log_a.loss - log_b.loss) < 1e-5
+    assert abs(log_a.grad_norm - log_b.grad_norm) < 1e-4
+
+    clone = _cpu_trainer()
+    clone.system.load_state_dict(first.system.state_dict())
+    clone_param = next(iter(clone.opt.param_groups[0]["params"]))
+    assert clone_param not in clone.opt.state
+    clone.step_once(2)
+    assert clone_param in clone.opt.state
+    assert int(clone.opt.state[clone_param]["step"].item()) == 1
+    continued_param = next(iter(continued.opt.param_groups[0]["params"]))
+    assert int(continued.opt.state[continued_param]["step"].item()) >= 2

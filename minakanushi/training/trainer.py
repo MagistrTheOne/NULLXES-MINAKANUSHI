@@ -27,10 +27,12 @@ from minakanushi.training.metrics import (
     assemble_bundle,
     branch_diversity,
     counterfactual_separation_score,
+    displacement_error,
     masked_mse,
     memory_effect_delta,
     policy_firewall_metrics,
 )
+from minakanushi.training.phase_sampler import PhaseCurriculumSampler, mode_for_job_step
 from minakanushi.training.objectives import compute_objectives
 from minakanushi.training.parallel import clip_grad_norm_mixed, collect_full_checkpoint, dist_barrier, is_rank0, training_device
 from minakanushi.training.resume import WarmupScheduler, apply_resume
@@ -201,17 +203,31 @@ class Trainer:
         self.scheduler = WarmupScheduler(self.opt, train.warmup_steps, train.learning_rate)
         self.start_step = 1
         self.dataset = None
+        self.sampler = None
         if str(train.dataset_root).strip():
             data_root = Path(train.dataset_root)
             if not data_root.is_absolute():
                 data_root = self.root / data_root
             self.dataset = JsonEpisodeDataset(data_root, seed=train.seed)
+            if train.sampler_mode != "uniform":
+                self.sampler = PhaseCurriculumSampler(
+                    self.dataset.paths, self.dataset.phases, seed=train.seed
+                )
+        self.dataset_cursor = 0
         self._resume_extras: dict = {}
 
     def resume_from(self, path: Path) -> None:
         state = apply_resume(path, self.system, self.opt, self.scheduler)
         self.start_step = int(state.last_step) + 1
+        self.dataset_cursor = int(state.dataset_cursor)
         self._resume_extras = dict(state.extras)
+
+    def _sampler_mode(self, step: int) -> str:
+        mode = str(self.config.training.sampler_mode)
+        if mode == "auto":
+            job = int(step) - int(self.start_step) + 1
+            return mode_for_job_step(job, warm_steps=self.config.training.warm_steps)
+        return mode
 
     def _load_episode(self, step: int, *, scenario: str | None, episode_index: int | None):
         train = self.config.training
@@ -219,7 +235,14 @@ class Trainer:
         if self.dataset is not None:
             if scenario is not None:
                 return self.dataset.episode_for_scenario(scenario, int(episode_index or 0))
-            idx = int(episode_index) if episode_index is not None else (step - 1) % len(self.dataset)
+            if episode_index is not None:
+                return self.dataset.episode(int(episode_index))
+            mode = self._sampler_mode(step)
+            if self.sampler is not None and mode in {"warm", "intelligence"}:
+                idx = self.sampler.choose(step, mode)
+            else:
+                idx = (step - 1) % len(self.dataset)
+            self.dataset_cursor = int(idx)
             return self.dataset.episode(idx)
         ep_idx = int(episode_index) if episode_index is not None else (step - 1) % max(train.n_overfit_episodes, 1)
         scenario_name = scenario or TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
@@ -440,6 +463,16 @@ class Trainer:
         err_with = masked_mse(pkt.pred_n.entity_xy, pkt.aligned_next, pkt.aligned_occ)
         err_without = masked_mse(core_off.world_state.entity_xy, pkt.aligned_next, pkt.aligned_occ)
         memory_future = float((err_without - err_with).detach())
+        trajs_off = self.system.future.predict(
+            core_off.world_state, pkt.candidates, max_horizon=self.config.architecture.prediction_horizons.short
+        )
+        primary_off = [t for t in trajs_off if t.strategy_id == pkt.candidates[0].strategy_id]
+        pred_future_off = primary_off[0].states_xy.unsqueeze(0)
+        ade_on, _ = displacement_error(pkt.pred_future, pkt.true_future, pkt.aligned_occ)
+        ade_off, _ = displacement_error(pred_future_off, pkt.true_future, pkt.aligned_occ)
+        memory_ade_on = float(ade_on.detach())
+        memory_ade_off = float(ade_off.detach())
+        memory_helps_future = 1.0 if memory_ade_on < memory_ade_off else 0.0
         primary = [t for t in pkt.trajs if t.strategy_id == pkt.candidates[0].strategy_id]
         branch_xy = torch.stack([t.states_xy for t in primary], dim=0)
         future_div = float(branch_diversity(branch_xy).detach())
@@ -489,6 +522,9 @@ class Trainer:
             memory_future_delta=memory_future,
             future_diversity=future_div,
             counterfactual_quality=counterfactual,
+            memory_ade_on=memory_ade_on,
+            memory_ade_off=memory_ade_off,
+            memory_helps_future=memory_helps_future,
         )
         return asdict(bundle)
 
@@ -562,8 +598,10 @@ class Trainer:
                         "step": step,
                         "seed": train.seed,
                         "dataset_name": train.dataset_name,
-                        "dataset_cursor": step,
+                        "dataset_cursor": int(self.dataset_cursor if self.dataset is not None else step),
                         "dataset_root": train.dataset_root,
+                        "sampler_mode": train.sampler_mode,
+                        "warm_steps": train.warm_steps,
                         "identity_initialized": True,
                         "identity_trainable": False,
                         "identity": canonical_identity_payload()["identity_state"],

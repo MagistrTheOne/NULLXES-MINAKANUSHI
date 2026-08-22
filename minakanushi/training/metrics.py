@@ -35,6 +35,9 @@ class MetricBundle:
     memory_future_delta: float = 0.0
     future_diversity: float = 0.0
     counterfactual_quality: float = 0.0
+    memory_ade_on: float = 0.0
+    memory_ade_off: float = 0.0
+    memory_helps_future: float = 0.0
 
 
 def masked_mse(pred: Tensor, true: Tensor, mask: Tensor) -> Tensor:
@@ -215,6 +218,9 @@ def assemble_bundle(
     memory_future_delta: float = 0.0,
     future_diversity: float = 0.0,
     counterfactual_quality: float = 0.0,
+    memory_ade_on: float = 0.0,
+    memory_ade_off: float = 0.0,
+    memory_helps_future: float = 0.0,
 ) -> MetricBundle:
     pos = masked_mse(pred_xy, true_xy, occupied)
     vel = masked_mse(pred_vel, true_vel, occupied)
@@ -275,5 +281,8 @@ def assemble_bundle(
         memory_future_delta=float(memory_future_delta),
         future_diversity=float(future_diversity),
         counterfactual_quality=float(counterfactual_quality),
+        memory_ade_on=float(memory_ade_on),
+        memory_ade_off=float(memory_ade_off),
+        memory_helps_future=float(memory_helps_future),
     )
 

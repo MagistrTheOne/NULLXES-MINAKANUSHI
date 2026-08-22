@@ -54,8 +54,12 @@ def apply_resume(
 ) -> ResumeState:
     manifest, payload = load_mina(path, system, optimizer=optimizer, return_payload=True)
     extras = dict(manifest.get("train") or {})
+    if payload.get("optimizer") is None:
+        raise ValueError("checkpoint has no optimizer state; refusing weights-only clone")
     last_step = int(extras.get("step", 0))
-    cursor = int(extras.get("dataset_cursor", last_step))
+    if extras.get("dataset_cursor") is None:
+        raise ValueError("checkpoint has no dataset_cursor; refusing silent resume")
+    cursor = int(extras["dataset_cursor"])
     sched = extras.get("scheduler")
     if isinstance(sched, dict):
         scheduler.load_state_dict(sched)
