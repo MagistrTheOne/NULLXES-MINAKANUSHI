@@ -1,12 +1,11 @@
 """Export a Hugging Face safetensors mirror. Canonical artifact stays *.mina.
 
-Does not upload. Does not construct 6.8B. Run on B300 after Acceptance Gate:
+Does not upload. Does not construct 6.8B. Run on H200/B300 after the v0.3
+curriculum gate, not on a laptop:
 
-    python scripts/export_hf.py \\
-      --mina path/to/minakanushi_stage0_step128.mina \\
-      --out /workspace/hf_mirror_v02
-
-v0.1 step64 is an engineering witness. Do not spend B300 hours mirroring it.
+    python scripts/export_safetensors.py \\
+      --mina minakanushi_stage0_step128.mina \\
+      --out MINAKANUSHI-6.8B
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ DEFAULT_README = ROOT / "models" / "MINA-6.8B" / "HF_README.md"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mina", type=Path, required=True, help="canonical *.mina")
-    parser.add_argument("--out", type=Path, required=True, help="staging directory")
+    parser.add_argument("--out", type=Path, default=Path("MINAKANUSHI-6.8B"))
     parser.add_argument("--shard-bytes", type=int, default=DEFAULT_SHARD_BYTES)
     parser.add_argument(
         "--cards-only",

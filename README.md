@@ -75,7 +75,8 @@ CPU stack check (does **not** construct 6.8B):
 
 ```text
 python scripts/sanity_pretrain.py
-python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b --n 2
+python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 2
+python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03
 ```
 
 Commands (operator-authorized machines only):
@@ -107,6 +108,7 @@ Direction after Yunmu / Gate 9+. Does not change the frozen 6.8B loop, dims, or 
 
 ## Docs
 
+- `NULLXES_x_Warmcore_x_Yunmu_TECH_SPEC_2026-08-21.md` — 中方同事：三方 tech spec + 诚实清单 + 路线图（2026-08-21）
 - `CHECKLIST.md` — этапы с 21-08-2026, машины, метрики
 - `docs/ARCHITECTURE.md`
 - `docs/POSITION_FIELD.md`
@@ -132,6 +134,8 @@ Direction after Yunmu / Gate 9+. Does not change the frozen 6.8B loop, dims, or 
 - `docs/GATE_09_RUNTIME.md` — Autonomous Runtime (`cycle()`, RuntimeState)
 - `docs/DATASET_V1.md` — SyntheticWorld dataset contract
 - `docs/MINA_6_8B_TRAINING.md` — 6.8B contract (Yunmu / Warmcore)
+- `docs/MINA_CURRICULUM_V03.md` — Status Core curriculum v0.3 (32/64 frames, denser revision)
+- `docs/MINA_OPTIMIZATION_V031.md` — v0.3.1 loop pass (sampler, resume, ADE memory, HF export)
 - `docs/MINA_TRAINING_V02.md` — Status Core v0.2 freeze, identity init, JSON, resume
 - `docs/DATASET_PIPELINE.md` — JsonEpisodeDataset
 - `docs/RESUME_TRAINING.md` — same-model resume

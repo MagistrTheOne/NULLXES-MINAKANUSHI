@@ -98,7 +98,20 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
 
 - [ ] **HF safetensors mirror** — после Acceptance Gate, не step64.  
   `.mina` = канон. safetensors = витрина Hub.  
-  `python scripts/export_hf.py --mina final.mina --out hf_mirror`
+  `python scripts/export_safetensors.py --mina final.mina --out hf_mirror`
+
+- [ ] **Curriculum v0.3** — `dataset/mina_6_8b_v03` · 32/64 кадров · correction density · future forks  
+  `python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 250`  
+  `python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03 --gate`  
+  H200 resume только после этого гейта.
+
+- [ ] **Optimization Pass v0.3.1** — контур, не сеть. `docs/MINA_OPTIMIZATION_V031.md`  
+  `python scripts/freeze_step128.py --mina minakanushi_stage0_step128.mina --out artifacts/v031/step128`  
+  `python scripts/audit_resume.py --mina minakanushi_stage0_step128.mina`  
+  `python scripts/gate_v031_export.py --mina probe.mina --out artifacts/v031/hf_probe`  
+  `python scripts/gate_v031_validate.py --root dataset/mina_6_8b_v03 --n 100`  
+  `python scripts/gate_v031_loss_probe.py --steps 32`  
+  H200 только после якоря + resume replay + sampler + CPU probe.
 
 ---
 

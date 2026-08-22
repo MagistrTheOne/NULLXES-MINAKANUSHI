@@ -18,13 +18,14 @@ full B300 segment that has passed IdentityBound → JSON curriculum → train �
 Acceptance Gate.
 
 ```text
-python scripts/export_hf.py \
-  --mina path/to/final.mina \
-  --out /workspace/hf_mirror_v02
+python scripts/export_safetensors.py \
+  --mina minakanushi_stage0_step128.mina \
+  --out MINAKANUSHI-6.8B
 ```
 
-`--cards-only` writes `config.json`, `MINAKANUSHI_CARD.json`,
-`minakanushi_runtime.json`, and `generation/NO` without touching 26 GB.
+`--cards-only` writes `config.json`, `minakanushi_config.json`,
+`MINAKANUSHI_CARD.json`, `minakanushi_runtime.json`, `LICENSE`, and
+`generation/NO` without touching 27 GB.
 
 Weights go out as bf16 shards (~13.6 GB for 6.8B), 5 GiB each, plus
 `model.safetensors.index.json`. Optimizer and RNG stay inside `.mina`.
@@ -38,5 +39,9 @@ chat_template
 generation_config.json
 ```
 
-Load path remains `load_mina(...)`. `AutoModel.from_pretrained` is not supported.
-Upload is a later step. This document does not publish weights.
+Load path remains `load_mina(...)`. `AutoModel.from_pretrained` is a type tag
+(`AutoConfig` / `AutoModel`, never `AutoModelForCausalLM`) and refuses
+`latent_dim >= 4096` construct. It is not the runtime.
+
+Upload is a later step. This document does not publish weights. Do not
+convert step128 on a laptop.

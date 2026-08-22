@@ -85,6 +85,34 @@ def hf_config(manifest: dict, *, canonical_checkpoint: str) -> dict:
         "pwm": False,
         "not_a_language_model": True,
         "not_a_chat_model": True,
+        "auto_map": {
+            "AutoConfig": "minakanushi.hub.MinakanushiHFConfig",
+            "AutoModel": "minakanushi.hub.MinakanushiHubModel",
+        },
+    }
+    assert_not_llm_card(config)
+    return config
+
+
+def minakanushi_native_config(manifest: dict, *, canonical_checkpoint: str) -> dict:
+    """Native identity next to the Hub card. Not a Transformers architecture list."""
+    config = {
+        "architecture": "MINAKANUSHI",
+        "organization": manifest.get("organization", "NULLXES"),
+        "short_name": "MINA",
+        "system_class": manifest.get("system_class", "adaptive_situational_intelligence"),
+        "native_runtime": "nullxes",
+        "canonical_format": "mina",
+        "canonical_checkpoint": canonical_checkpoint,
+        "public_mirror": "safetensors",
+        "action_output": "ActionIntent",
+        "pwm": False,
+        "latent_dim": int(manifest["latent_dim"]),
+        "state_dim": int(manifest["state_dim"]),
+        "memory_dim": int(manifest["memory_dim"]),
+        "core_depth": int(manifest["core_depth"]),
+        "world_slots": int(manifest["world_slots"]),
+        "memory_slots": int(manifest["memory_slots"]),
     }
     assert_not_llm_card(config)
     return config
@@ -126,6 +154,8 @@ def runtime_card(canonical_checkpoint: str) -> dict:
         "action_output": "ActionIntent",
         "pwm": False,
         "transformers_auto_model": False,
+        "transformers_auto_config": True,
+        "transformers_hub_role": "type_tag_only",
         "generation": False,
         "chat_template": False,
     }
@@ -179,6 +209,9 @@ def write_cards(out_dir: Path, manifest: dict, canonical_checkpoint: str) -> Non
     out_dir.mkdir(parents=True, exist_ok=True)
     files = {
         "config.json": hf_config(manifest, canonical_checkpoint=canonical_checkpoint),
+        "minakanushi_config.json": minakanushi_native_config(
+            manifest, canonical_checkpoint=canonical_checkpoint
+        ),
         "MINAKANUSHI_CARD.json": minakanushi_card(),
         "minakanushi_runtime.json": runtime_card(canonical_checkpoint),
     }
@@ -202,6 +235,7 @@ def export_hf_mirror(
     shard_bytes: int = DEFAULT_SHARD_BYTES,
     cards_only: bool = False,
     readme: str | Path | None = None,
+    license_path: str | Path | None = None,
 ) -> dict:
     """Export a safetensors mirror next to identity JSON. Does not upload."""
     mina_path = Path(mina_path)
@@ -224,6 +258,7 @@ def export_hf_mirror(
             (out_dir / "architecture.yaml").write_bytes(zf.read(CONFIG_NAME))
         if cards_only:
             _copy_readme(readme, out_dir)
+            _copy_license(license_path, out_dir)
             return {"cards_only": True, "canonical": mina_path.name, "out": str(out_dir)}
 
         current: dict[str, Tensor] = {}
@@ -280,6 +315,7 @@ def export_hf_mirror(
         json.dumps(index, indent=2) + "\n", encoding="utf-8"
     )
     _copy_readme(readme, out_dir)
+    _copy_license(license_path, out_dir)
     return {
         "cards_only": False,
         "canonical": mina_path.name,
@@ -296,3 +332,11 @@ def _copy_readme(readme: str | Path | None, out_dir: Path) -> None:
     src = Path(readme)
     if src.exists():
         (out_dir / "README.md").write_bytes(src.read_bytes())
+
+
+def _copy_license(license_path: str | Path | None, out_dir: Path) -> None:
+    if license_path is None:
+        return
+    src = Path(license_path)
+    if src.exists():
+        (out_dir / "LICENSE").write_bytes(src.read_bytes())

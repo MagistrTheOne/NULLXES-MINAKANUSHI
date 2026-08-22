@@ -68,6 +68,7 @@ def test_hf_config_is_not_llama() -> None:
     assert config["model_type"] == "minakanushi"
     assert config["runtime"] == "load_mina"
     assert config["action_output"] == "ActionIntent"
+    assert config["auto_map"]["AutoConfig"] == "minakanushi.hub.MinakanushiHFConfig"
     assert "architectures" not in config
     with pytest.raises(ValueError, match="llama"):
         assert_not_llm_card({"model_type": "llama"})
@@ -94,6 +95,8 @@ def test_export_mirror_drops_optimizer_and_writes_bf16_shards(tmp_path: Path) ->
     assert config["format"] == "safetensors_mirror"
     assert card["not_a_chat_model"] is True
     assert runtime["transformers_auto_model"] is False
+    assert runtime["transformers_hub_role"] == "type_tag_only"
+    assert (out / "minakanushi_config.json").is_file()
     assert (out / "generation" / "NO").is_file()
     restored: dict[str, torch.Tensor] = {}
     for name in result["shards"]:
@@ -113,8 +116,25 @@ def test_export_sharded_mina_and_cards_only(tmp_path: Path) -> None:
     result = export_hf_mirror(mina, out, shard_bytes=10_000_000)
     assert result["parameters"] == 32 * 16 + 16
     cards = tmp_path / "cards"
-    card_result = export_hf_mirror(mina, cards, cards_only=True)
+    license_src = tmp_path / "LICENSE"
+    license_src.write_text("NULLXES MINAKANUSHI\n", encoding="utf-8")
+    card_result = export_hf_mirror(mina, cards, cards_only=True, license_path=license_src)
     assert card_result["cards_only"] is True
     assert not list(cards.glob("*.safetensors"))
     assert (cards / "config.json").exists()
+    assert (cards / "minakanushi_config.json").exists()
+    assert (cards / "LICENSE").exists()
     assert (cards / "architecture.yaml").exists()
+
+
+def test_export_roundtrip_reloads_bf16(tmp_path: Path) -> None:
+    pytest.importorskip("safetensors")
+    from minakanushi.training.export_roundtrip import export_and_reload
+
+    mina = tmp_path / "probe_step128.mina"
+    _write_mina(mina, sharded=False)
+    out = tmp_path / "MINAKANUSHI-6.8B"
+    result = export_and_reload(mina, out, shard_bytes=64)
+    assert result["reloaded"] is True
+    assert result["n_tensors"] == 2
+    assert (out / "minakanushi_config.json").is_file()
