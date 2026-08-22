@@ -9,6 +9,7 @@ from minakanushi.training.capability import (
     FORBIDDEN_CLAIMS,
     LEDGER_ROWS,
     compare_heldout,
+    compare_retention,
     cpu_trainer,
     forbidden_in_text,
     gate_a_retention,
@@ -17,6 +18,7 @@ from minakanushi.training.capability import (
     gate_d_counterfactual,
     gate_e_memory,
     gate_f_revision_honesty,
+    gate_g_no_shortcut,
     packet_snapshot,
     snapshot_drift,
 )
@@ -62,6 +64,24 @@ def test_heldout_flags_memorization() -> None:
     assert verdict["pass"] is False
 
 
+def test_retention_flags_forgotten_physics() -> None:
+    before = {
+        "scenarios": {
+            "const_velocity": {"future_ADE": 1.0},
+            "hidden_correction": {"future_ADE": 4.0},
+        }
+    }
+    after = {
+        "scenarios": {
+            "const_velocity": {"future_ADE": 3.0},
+            "hidden_correction": {"future_ADE": 1.5},
+        }
+    }
+    verdict = compare_retention(before, after)
+    assert verdict["physics_forgotten_for_hidden_trick"] is True
+    assert verdict["pass"] is False
+
+
 def test_capability_gates_on_cpu_dev(tmp_path: Path) -> None:
     trainer = cpu_trainer(12)
     a = gate_a_retention(trainer, tmp_path / "reference_before")
@@ -83,6 +103,11 @@ def test_capability_gates_on_cpu_dev(tmp_path: Path) -> None:
     assert e["memory_ade_off"] >= 0.0
     f = gate_f_revision_honesty(trainer)
     assert "never_revises_trap" in f
+    g = gate_g_no_shortcut(trainer)
+    assert g["pass"] is True
+    assert "drop_vision" in g["future_ADE"]
+    assert "permute_structure" in g["future_ADE"]
+    assert "no_shortcut" in g
     pkt = trainer.unroll(1, scenario="const_velocity", episode_index=0, seed=7, length=12)
     same = packet_snapshot(pkt)
     drift = snapshot_drift(same, same)

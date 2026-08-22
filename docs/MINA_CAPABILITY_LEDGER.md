@@ -17,8 +17,17 @@ ALLOWED
   ActionIntent выбирается с учётом world state
 ```
 
-Update this table only from Gate A–F measurements. Do not update it from
-`loss=` in a train log.
+Update this table only from Gate A–G measurements. Do not update it from
+`loss=` in a train log. A PASS row must cite `n=` and the numbers, for example:
+
+```text
+Memory improves future
+PASS
+heldout hide scenario:
+ADE ON 1.8
+ADE OFF 3.4
+n=500
+```
 
 | Ability | Proven | Gate |
 |---|---|---|
@@ -31,6 +40,7 @@ Update this table only from Gate A–F measurements. Do not update it from
 | Causal attribution | protocol ready; 6.8B unknown | Gate C |
 | Held-out vs seen | protocol ready; 6.8B unknown | Gate B |
 | Revision honesty | protocol ready; `false=0` is not enough | Gate F |
+| No shortcut | protocol ready; 6.8B unknown | Gate G |
 | Multimodal grounding | no | Gate 9+ |
 
 After B300/H200, fill **after** columns from the same protocol. If only train ADE
@@ -54,17 +64,19 @@ Writes `reference_before/*.pt` (Gate A) and `capability_report.json`.
 | D counterfactual | WAIT vs MOVE_TO | `future_distance ≈ 0` |
 | E memory | Gone ~30 frames, then back | ADE(on) ≥ ADE(off) and reacquisition dead |
 | F honesty | Revise when wrong, persist when right | `false_revision=0` because it never revises |
+| G no shortcut | Ablate vision / delay telemetry; permute speed·position | both channels ignored, or permute is a no-op |
 
 ## Order before claiming training helped
 
 ```text
-1. step128 freeze
-2. export safetensors
-3. v0.3.1 100-episode validation report
-4. B300/H200 train
-5. held-out evaluation (Gate B) + retention (Gate A)
-6. update this ledger from numbers
-7. then say "training improved prediction / revision / memory"
+1. v0.3.1 baseline pack     scripts/lock_v031_baseline.py → artifacts/v031/baseline
+2. held-out split           scripts/split_heldout.py  (seed, scenario, episode_index)
+3. extended audit           scripts/audit_curriculum.py --gate
+4. export safetensors       scripts/export_safetensors.py
+5. H200 Phase 1             1000 steps then STOP
+6. retention + held-out     scripts/compare_v031.py
+7. update this ledger from numbers
+8. then say "training improved prediction / revision / memory"
 ```
 
-Step 7 is the first time the sentence may mention improvement. Not at step 4.
+Step 8 is the first time the sentence may mention improvement. Not at step 5.

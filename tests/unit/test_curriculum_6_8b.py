@@ -84,6 +84,14 @@ def test_audit_curriculum_report(tmp_path: Path) -> None:
     assert report["hf_role"] == "adapter_only"
     assert set(report["phase_counts"]) == {"physics", "agency", "causality", "embodiment"}
     assert report["gate"]["pwm_false"] is True
+    assert "future_diversity_min" in report
+    assert "future_diversity_max" in report
+    assert "future_diversity_std" in report
+    assert "revision_distribution" in report
+    assert "max_action_fraction" in report
+    assert (tmp_path / "train" / "index.jsonl").is_file()
+    assert (tmp_path / "heldout" / "index.jsonl").is_file()
+    assert "future_diversity_collapsed" in report
 
 
 def test_v03_default_lengths_and_counterfactual_forks() -> None:

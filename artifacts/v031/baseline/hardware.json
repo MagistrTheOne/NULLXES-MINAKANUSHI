@@ -1,0 +1,20 @@
+{
+  "canonical_checkpoint": "*.mina",
+  "dataset_root": "dataset/mina_6_8b_v03",
+  "dataset_split": "train",
+  "device": "cuda",
+  "forbidden": [
+    "construct minakanushi_6_8b on CPU",
+    "construct minakanushi_6_8b on RTX PRO 6000",
+    "train 6.8B on 1x H100 80GB",
+    "DWC / latent / slots / new heads / language adapter / RGB"
+  ],
+  "gpu": "H200",
+  "parallelism": "fsdp2_zero3",
+  "phase": "v0.3.1 Phase 1",
+  "precision": "bf16",
+  "steps": 1000,
+  "stop": "stop after 1000 steps; do not train forever",
+  "training_name": "mina_6_8b_v03",
+  "yaml_steps": 1000
+}

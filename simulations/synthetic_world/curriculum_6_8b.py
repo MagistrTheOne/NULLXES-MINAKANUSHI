@@ -375,4 +375,7 @@ def write_curriculum(
             root, phase, config, seed=seed, n_episodes=n_episodes, length=phase_len
         )
     write_index(root, written)
+    from minakanushi.training.heldout import write_heldout_split
+
+    write_heldout_split(root)
     return written

@@ -1,0 +1,161 @@
+{
+  "allowed_claims": [
+    "MINA \u0443\u043b\u0443\u0447\u0448\u0438\u043b\u0430 prediction error",
+    "MINA \u043d\u0430\u0443\u0447\u0438\u043b\u0430\u0441\u044c \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c belief",
+    "memory \u0443\u043b\u0443\u0447\u0448\u0430\u0435\u0442 future prediction",
+    "ActionIntent \u0432\u044b\u0431\u0438\u0440\u0430\u0435\u0442\u0441\u044f \u0441 \u0443\u0447\u0451\u0442\u043e\u043c world state"
+  ],
+  "forbidden_claims": [
+    "MINA \u043f\u043e\u043b\u0443\u0447\u0438\u043b\u0430 \u0441\u043e\u0437\u043d\u0430\u043d\u0438\u0435",
+    "MINA \u043f\u043e\u043d\u044f\u043b\u0430 \u043c\u0438\u0440",
+    "MINA \u0441\u0442\u0430\u043b\u0430 AGI",
+    "\u043c\u043e\u0434\u0435\u043b\u044c \u0434\u0443\u043c\u0430\u0435\u0442 \u043a\u0430\u043a \u0447\u0435\u043b\u043e\u0432\u0435\u043a",
+    "became conscious",
+    "became AGI",
+    "understood the world"
+  ],
+  "gates": {
+    "A": {
+      "claim": "snapshots of world_state / future / belief / revision. Not 'she remembered who she is'.",
+      "gate": "A_retention",
+      "pass": true,
+      "scenarios": {
+        "agent_move": {
+          "future_ADE": 1.848410725593567,
+          "future_norm": 14.235595703125,
+          "revision_detected": 1.0,
+          "world_norm": 7.5978312492370605
+        },
+        "const_velocity": {
+          "future_ADE": 2.031919479370117,
+          "future_norm": 14.077718734741211,
+          "revision_detected": 0.0,
+          "world_norm": 7.520692825317383
+        },
+        "hidden_correction": {
+          "future_ADE": 2.1335551738739014,
+          "future_norm": 11.641437530517578,
+          "revision_detected": 1.0,
+          "world_norm": 6.126169681549072
+        }
+      }
+    },
+    "B": {
+      "claim": "seen vs unseen ADE. Train-only drop without held-out drop is memorization.",
+      "gate": "B_heldout",
+      "memorization_risk": "unknown_until_after_train",
+      "pass": true,
+      "seen_ADE": {
+        "agent_move": 1.848410725593567,
+        "const_velocity": 2.031919479370117
+      },
+      "seen_seed": 7,
+      "unseen_ADE": {
+        "agent_move": 1.7827993631362915,
+        "const_velocity": 2.0381064414978027
+      },
+      "unseen_seed": 9999
+    },
+    "C": {
+      "claim": "external event unexpected_physics, revision = velocity hypothesis invalid. Not new-picture \u2192 new-answer.",
+      "external_event": "unexpected_physics",
+      "frame": 6,
+      "gate": "C_causality",
+      "pass": true,
+      "picture_in_picture_out": true,
+      "revision_detected": 0.0,
+      "scenario": "unexpected_stop",
+      "training_frame": 6
+    },
+    "D": {
+      "action_a": "WAIT",
+      "action_b": "MOVE_TO",
+      "claim": "same observation, WAIT vs MOVE_TO, Future A \u2260 Future B. Distance\u22480 means no world model.",
+      "future_distance": 0.023340970277786255,
+      "gate": "D_counterfactual",
+      "pass": true
+    },
+    "E": {
+      "claim": "object gone for many frames then returns. ADE(memory on) vs ADE(memory off).",
+      "gate": "E_memory",
+      "hidden_frames_before_evidence": 17,
+      "memory_ade_off": 2.0579793453216553,
+      "memory_ade_on": 2.2365944385528564,
+      "memory_future_delta": -0.013537131249904633,
+      "memory_helps_future": 0.0,
+      "pass": true,
+      "reacquisition_accuracy": 1.0
+    },
+    "F": {
+      "claim": "revise when belief is wrong; persist when belief is right. false_revision=0 alone can mean never-revises.",
+      "gate": "F_revision_honesty",
+      "never_revises_trap": false,
+      "pass": true,
+      "when_needed": {
+        "revision_accuracy": 0.5,
+        "revision_detected": 1.0,
+        "scenario": "hidden_correction"
+      },
+      "when_not_needed": {
+        "false_revision_rate": 0.0,
+        "revision_detected": 0.0,
+        "scenario": "const_velocity"
+      }
+    }
+  },
+  "ledger": [
+    {
+      "ability": "World state reconstruction",
+      "gate": "v0.1",
+      "proven": "yes (cpu_dev / Milestone 1)"
+    },
+    {
+      "ability": "Entity persistence",
+      "gate": "v0.1",
+      "proven": "yes (cpu_dev / Milestone 1)"
+    },
+    {
+      "ability": "Belief revision",
+      "gate": "Gate 03",
+      "proven": "partial"
+    },
+    {
+      "ability": "Memory improves future",
+      "gate": "v0.3.1",
+      "proven": "yes on cpu_dev probe"
+    },
+    {
+      "ability": "Counterfactual futures",
+      "gate": "Gate D",
+      "proven": "cpu_dev measured; 6.8B unknown"
+    },
+    {
+      "ability": "Long horizon prediction",
+      "gate": "v0.4",
+      "proven": "waiting"
+    },
+    {
+      "ability": "Causal attribution",
+      "gate": "Gate C",
+      "proven": "protocol ready; 6.8B unknown"
+    },
+    {
+      "ability": "Held-out vs seen",
+      "gate": "Gate B",
+      "proven": "protocol ready; 6.8B unknown"
+    },
+    {
+      "ability": "Revision honesty",
+      "gate": "Gate F",
+      "proven": "protocol ready; false=0 is not enough"
+    },
+    {
+      "ability": "Multimodal grounding",
+      "gate": "Gate 9+",
+      "proven": "no"
+    }
+  ],
+  "not_a_claim": "loss dropped is not intelligence appeared",
+  "pass": true,
+  "protocol": "MINA capability ledger"
+}

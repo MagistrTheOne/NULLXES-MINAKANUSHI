@@ -24,7 +24,8 @@ def main() -> None:
     parser.add_argument("--warm-steps", type=int, default=16)
     parser.add_argument("--seed", type=int, default=11)
     args = parser.parse_args()
-    ds = JsonEpisodeDataset(args.root, seed=args.seed)
+    split = "train" if (args.root / "train" / "index.jsonl").is_file() else ""
+    ds = JsonEpisodeDataset(args.root, seed=args.seed, split=split)
     sampler = PhaseCurriculumSampler(ds.paths, ds.phases, seed=args.seed)
     counts: Counter[str] = Counter()
     pwm = False

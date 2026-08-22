@@ -28,25 +28,33 @@ class JsonEpisodeDataset:
         *,
         seed: int = 7,
         curriculum_6_8b: bool = True,
+        split: str = "",
     ) -> None:
         self.root = Path(root)
         if not self.root.exists():
             raise FileNotFoundError(f"dataset root missing: {self.root}")
         self.seed = int(seed)
         self.curriculum_6_8b = bool(curriculum_6_8b)
+        self.split = str(split or "")
         self.paths, self.scenarios, self.phases = self._index_rows()
         if not self.paths:
             raise FileNotFoundError(f"no episode JSON under {self.root}")
 
     def _index_rows(self) -> tuple[tuple[Path, ...], tuple[str, ...], tuple[str, ...]]:
-        index = self.root / "index.jsonl"
+        pack = self.root
+        index = pack / "index.jsonl"
+        if self.split:
+            split_index = pack / self.split / "index.jsonl"
+            if not split_index.is_file():
+                raise FileNotFoundError(f"split index missing: {split_index}")
+            index = split_index
         rows: list[tuple[Path, str, str]] = []
         if index.is_file():
             for line in index.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
                     continue
                 rec = json.loads(line)
-                path = self.root / rec["path"]
+                path = pack / rec["path"]
                 scenario = str(rec["scenario"]) if rec.get("scenario") else scenario_from_episode_id(path.stem)
                 phase = str(rec.get("phase") or path.parent.name)
                 rows.append((path, scenario, phase))
@@ -56,7 +64,12 @@ class JsonEpisodeDataset:
                 tuple(ph for _, _, ph in rows),
             )
         found = sorted(self.root.rglob("*.json"))
-        found = [p for p in found if p.name not in {"dataset_report.json", "index.jsonl"}]
+        found = [
+            p
+            for p in found
+            if p.name not in {"dataset_report.json", "splits.json", "index.jsonl"}
+            and p.parent.name not in {"train", "heldout"}
+        ]
         rng = np.random.default_rng(self.seed)
         order = np.arange(len(found))
         rng.shuffle(order)

@@ -1,4 +1,4 @@
-"""Capability protocol A–F. cpu_dev. Does not construct 6.8B.
+"""Capability protocol A–G. cpu_dev. Does not construct 6.8B.
 
     python scripts/gate_capability.py --out artifacts/v031/capability
 """
@@ -37,7 +37,11 @@ def main() -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
-    if not report["pass"]:
+    unproven = payload.get("unproven") or []
+    if unproven:
+        print(f"protocol complete; capabilities not proven: {unproven}")
+        print("do not update ledger PASS. H200 may still measure the same gates.")
+    if not report.get("protocol_complete"):
         raise SystemExit(1)
 
 

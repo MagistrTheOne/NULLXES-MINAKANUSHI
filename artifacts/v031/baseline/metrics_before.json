@@ -1,0 +1,6 @@
+{
+  "constructed_6_8b": false,
+  "next": "run lock on the box that holds step128.mina, or pass --mina",
+  "reason": "no *.mina on this machine",
+  "status": "MISSING"
+}

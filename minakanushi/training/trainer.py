@@ -203,12 +203,18 @@ class Trainer:
         self.scheduler = WarmupScheduler(self.opt, train.warmup_steps, train.learning_rate)
         self.start_step = 1
         self.dataset = None
+        self.heldout = None
         self.sampler = None
         if str(train.dataset_root).strip():
             data_root = Path(train.dataset_root)
             if not data_root.is_absolute():
                 data_root = self.root / data_root
-            self.dataset = JsonEpisodeDataset(data_root, seed=train.seed)
+            self.dataset = JsonEpisodeDataset(
+                data_root, seed=train.seed, split=str(train.dataset_split or "")
+            )
+            held_index = data_root / "heldout" / "index.jsonl"
+            if held_index.is_file() and held_index.read_text(encoding="utf-8").strip():
+                self.heldout = JsonEpisodeDataset(data_root, seed=train.seed, split="heldout")
             if train.sampler_mode != "uniform":
                 self.sampler = PhaseCurriculumSampler(
                     self.dataset.paths, self.dataset.phases, seed=train.seed
@@ -298,10 +304,11 @@ class Trainer:
         episode_index: int | None = None,
         seed: int | None = None,
         length: int | None = None,
+        episode=None,
     ) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
-        episode = self._load_episode(
+        episode = episode or self._load_episode(
             step, scenario=scenario, episode_index=episode_index, seed=seed, length=length
         )
         ep_idx = int(episode.episode_index)
@@ -564,6 +571,14 @@ class Trainer:
         metrics = None
         if step == 1 or step % self.config.training.eval_every == 0:
             metrics = self._metrics(pkt)
+            if self.heldout is not None:
+                with torch.no_grad():
+                    held_ep = self.heldout.episode((step - 1) % len(self.heldout))
+                    held_pkt = self.unroll(step, episode=held_ep)
+                    held = self._metrics(held_pkt)
+                metrics["heldout_score"] = float(held["future_ADE"])
+            else:
+                metrics["heldout_score"] = float("nan")
         return TrainLog(
             step=step,
             loss=float(pkt.breakdown.total.item()),
@@ -595,9 +610,29 @@ class Trainer:
                         flush=True,
                     )
             if log.metrics is not None and is_rank0():
+                eval_row = {
+                    "step": step,
+                    "loss": log.loss,
+                    "future_ADE": log.metrics.get("future_ADE"),
+                    "future_FDE": log.metrics.get("future_FDE"),
+                    "revision_accuracy": log.metrics.get("revision_accuracy"),
+                    "false_revision": log.metrics.get("false_revision_rate"),
+                    "memory_future_delta": log.metrics.get("memory_future_delta"),
+                    "counterfactual_distance": log.metrics.get("counterfactual_quality"),
+                    "heldout_score": log.metrics.get("heldout_score"),
+                    "terms": log.terms,
+                }
                 with metrics_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "metrics": log.metrics}) + "\n")
-                print(f"metrics step={step} {log.metrics}", flush=True)
+                with (out_dir / "experiment.jsonl").open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(eval_row) + "\n")
+                print(
+                    f"eval step={step} loss={log.loss:.4f} ADE={eval_row['future_ADE']} "
+                    f"FDE={eval_row['future_FDE']} rev={eval_row['revision_accuracy']} "
+                    f"false_rev={eval_row['false_revision']} memΔ={eval_row['memory_future_delta']} "
+                    f"cf={eval_row['counterfactual_distance']} heldout={eval_row['heldout_score']}",
+                    flush=True,
+                )
             abort_reason = _diagnose_run(logs)
             if abort_reason is not None:
                 if is_rank0():

@@ -18,8 +18,13 @@ Each episode stores WAIT / MOVE_TO / FOLLOW / AVOID forks from the same world se
 
 ```text
 python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 250
+python scripts/split_heldout.py --root dataset/mina_6_8b_v03
 python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03 --gate
 ```
+
+Held-out is `episode_index % 10 == 9` by `(seed, scenario, episode_index)`, not a file shuffle: 900 train / 100 held-out. JSON stays in phase folders; only `train/index.jsonl` and `heldout/index.jsonl` are added.
+
+Extended audit (n≥1000) also fails if a revision type is zero, if one action ≥95%, or if `future_diversity` has no spread (min/max/mean/std).
 
 Gate before H200:
 
@@ -37,6 +42,8 @@ Resume after that:
 --config configs/training/mina_6_8b_v03.yaml
 --resume minakanushi_stage0_step128.mina
 ```
+
+Phase 1 is 1000 steps then STOP (`docs/MINA_TRAINING_CONTRACT_v03.md`). Train reads `dataset_split: train`.
 
 Safetensors remain a Hub mirror: `scripts/export_safetensors.py`. Canonical is `*.mina`.
 

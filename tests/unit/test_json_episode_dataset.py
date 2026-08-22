@@ -27,6 +27,8 @@ def test_json_episode_dataset_streams_and_roundtrips(tmp_path: Path) -> None:
     assert len(first.truth) == len(again.truth)
     ds2 = JsonEpisodeDataset(tmp_path, seed=7)
     assert ds.paths == ds2.paths
+    train_ds = JsonEpisodeDataset(tmp_path, seed=7, split="train")
+    assert len(train_ds) == 4
 
 
 def test_trainer_unroll_consumes_json(tmp_path: Path) -> None:
@@ -43,9 +45,13 @@ def test_trainer_unroll_consumes_json(tmp_path: Path) -> None:
         runtime_path=ROOT / "configs" / "runtime" / "cpu.yaml",
         simulation_path=ROOT / "configs" / "simulation" / "milestone1.yaml",
     )
-    cfg = replace(cfg, training=replace(cfg.training, dataset_root=str(tmp_path), sequence_length=8))
+    cfg = replace(
+        cfg,
+        training=replace(cfg.training, dataset_root=str(tmp_path), sequence_length=8, dataset_split="train"),
+    )
     trainer = Trainer(cfg, ROOT)
     assert trainer.dataset is not None
+    assert trainer.dataset.split == "train"
     pkt = trainer.unroll(1)
     json_episode = trainer.dataset.episode(0)
     assert pkt.scenario == json_episode.scenario

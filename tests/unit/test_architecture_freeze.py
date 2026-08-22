@@ -99,6 +99,18 @@ def test_v02_yaml_keeps_frozen_6_8b_dims() -> None:
     assert train.dataset_root.replace("\\", "/").endswith("dataset/mina_6_8b")
 
 
+def test_v03_yaml_keeps_frozen_6_8b_dims() -> None:
+    arch = load_architecture(ROOT / "configs" / "architecture" / "minakanushi_6_8b.yaml")
+    train = load_training(ROOT / "configs" / "training" / "mina_6_8b_v03.yaml")
+    plan = plan_from_training(arch, train)
+    assert_6_8b_frozen(arch)
+    assert plan.parallelism == "fsdp2_zero3"
+    assert plan.precision == "bf16"
+    assert train.steps == 1000
+    assert train.dataset_split == "train"
+    assert train.checkpoint_every == 250
+
+
 def test_fp16_is_forbidden_for_6_8b() -> None:
     arch = load_architecture(ROOT / "configs" / "architecture" / "minakanushi_6_8b.yaml")
     train = replace(load_training(ROOT / "configs" / "training" / "mina_6_8b_sanity.yaml"), precision="fp16")

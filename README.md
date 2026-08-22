@@ -76,6 +76,7 @@ CPU stack check (does **not** construct 6.8B):
 ```text
 python scripts/sanity_pretrain.py
 python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 2
+python scripts/split_heldout.py --root dataset/mina_6_8b_v03
 python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03
 ```
 
@@ -136,6 +137,7 @@ Direction after Yunmu / Gate 9+. Does not change the frozen 6.8B loop, dims, or 
 - `docs/MINA_6_8B_TRAINING.md` — 6.8B contract (Yunmu / Warmcore)
 - `docs/MINA_CURRICULUM_V03.md` — Status Core curriculum v0.3 (32/64 frames, denser revision)
 - `docs/MINA_OPTIMIZATION_V031.md` — v0.3.1 loop pass (sampler, resume, ADE memory, HF export)
+- `docs/MINA_TRAINING_CONTRACT_v03.md` — what may change before H200 (data/loop only)
 - `docs/MINA_CAPABILITY_LEDGER.md` — what is proven vs what is a story
 - `docs/MINA_TRAINING_V02.md` — Status Core v0.2 freeze, identity init, JSON, resume
 - `docs/DATASET_PIPELINE.md` — JsonEpisodeDataset

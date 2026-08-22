@@ -10,7 +10,9 @@ Do not touch DWC, latent_dim, slots, world state, loss architecture, or layers.
 3. HF safetensors test     scripts/gate_v031_export.py
 4. 100-episode validation  scripts/gate_v031_validate.py
 5. Capability protocol     scripts/gate_capability.py  + docs/MINA_CAPABILITY_LEDGER.md
-6. H200 full training      only after 1–5, then held-out eval, then ledger update
+6. Pre-training lock       scripts/lock_v031_baseline.py → artifacts/v031/baseline
+7. H200 Phase 1            1000 steps then STOP (not train forever)
+8. Retention + held-out    scripts/compare_v031.py, then ledger from n=
 ```
 
 ## Gate 0 — baseline
@@ -45,7 +47,7 @@ intelligence (after):
   causality 40%  agency 30%  embodiment 20%  physics 10%
 ```
 
-v0.3 resume YAML: `sampler_mode: auto`, `warm_steps: 16`.
+v0.3 resume YAML: `sampler_mode: auto`, `warm_steps: 16`, `dataset_split: train`, `steps: 1000` (Phase 1 stop).
 
 ## Gate 3 — hidden correction levels
 
@@ -61,6 +63,7 @@ Regenerate v0.3 if you want L2/L3 in the JSON pack:
 
 ```text
 python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 250
+python scripts/split_heldout.py --root dataset/mina_6_8b_v03
 python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03 --gate
 ```
 

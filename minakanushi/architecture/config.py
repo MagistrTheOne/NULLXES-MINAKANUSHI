@@ -152,6 +152,7 @@ class TrainingConfig:
     n_overfit_episodes: int = 16
     dataset_name: str = "stage0_synthetic"
     dataset_root: str = ""
+    dataset_split: str = ""
     sampler_mode: str = "uniform"
     warm_steps: int = 16
 
@@ -283,6 +284,7 @@ def load_training(path: str | Path) -> TrainingConfig:
         n_overfit_episodes=int(raw.get("n_overfit_episodes", 16)),
         dataset_name=str(raw.get("dataset_name", "stage0_synthetic")),
         dataset_root=str(raw.get("dataset_root", "")),
+        dataset_split=str(raw.get("dataset_split", "")),
         sampler_mode=str(raw.get("sampler_mode", "uniform")),
         warm_steps=int(raw.get("warm_steps", 16)),
     )

@@ -102,6 +102,7 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
 
 - [ ] **Curriculum v0.3** — `dataset/mina_6_8b_v03` · 32/64 кадров · correction density · future forks  
   `python scripts/generate_6_8b_curriculum.py --root dataset/mina_6_8b_v03 --n 250`  
+  `python scripts/split_heldout.py --root dataset/mina_6_8b_v03`  
   `python scripts/audit_curriculum.py --root dataset/mina_6_8b_v03 --gate`  
   H200 resume только после этого гейта.
 
@@ -111,9 +112,13 @@ CPU (IdentityBound + `--n 250` JSON + audit) = $0 GPU. На B300 только re
   `python scripts/gate_v031_export.py --mina probe.mina --out artifacts/v031/hf_probe`  
   `python scripts/gate_v031_validate.py --root dataset/mina_6_8b_v03 --n 100`  
   `python scripts/gate_v031_loss_probe.py --steps 32`  
-  `python scripts/gate_capability.py --out artifacts/v031/capability`  
-  H200 только после якоря + resume replay + sampler + CPU probe + capability protocol.  
-  После train: held-out (Gate B) → обновить `docs/MINA_CAPABILITY_LEDGER.md` из цифр, не из loss.
+  `python scripts/gate_capability.py --out artifacts/v031/capability`
+
+- [ ] **Pre-Training Lock v0.3.1** — чистый эксперимент, не «умнее». `docs/MINA_TRAINING_CONTRACT_v03.md`  
+  `python scripts/lock_v031_baseline.py --mina minakanushi_stage0_step128.mina --dataset dataset/mina_6_8b_v03 --out artifacts/v031/baseline`  
+  Phase 1 на H200: **1000 steps then STOP**. Смотреть loss / ADE/FDE / revision / memory_future_delta / counterfactual.  
+  После: `python scripts/compare_v031.py --before artifacts/v031/baseline/capability_before.json --after artifacts/v031/after/capability_report.json`  
+  Ledger только из цифр (`n=`). Gate G = no shortcut. Не стартовать H200 без baseline pack + held-out + audit.
 
 ---
 
