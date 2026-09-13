@@ -631,10 +631,14 @@ class MinakanushiLabEngine:
             ent.confidence = max(0.05, ent.confidence * 0.82)
             ent.persistence = max(0.0, 1.0 - ent.missing_steps / float(self.config.persistence_steps))
             ent.xy = ent.xy + ent.vel * self.config.dt
-            if eid in occluded or ent.missing_steps <= self.config.persistence_steps:
-                if ent.uncertainty < self.config.retirement_uncertainty:
-                    continue
-            if ent.missing_steps > self.config.persistence_steps:
+            # Occlusion is evidence of a blocked body, not absence. Keep the
+            # slot for as long as the entity stays occluded, even after the
+            # persistence window and even if uncertainty saturates.
+            if eid in occluded:
+                continue
+            if ent.missing_steps <= self.config.persistence_steps:
+                continue
+            if ent.uncertainty >= self.config.retirement_uncertainty or ent.missing_steps > self.config.persistence_steps:
                 retired.append(eid)
         for eid in retired:
             del entities[eid]
@@ -837,7 +841,8 @@ def run_selftest() -> dict[str, Any]:
     u0 = float(step0.belief.entities[11].uncertainty)
     world.hidden_ids.add(11)
     hidden_step = step0
-    for _ in range(4):
+    occlude_steps = config.persistence_steps + 4
+    for _ in range(occlude_steps):
         world.step(ActionIntent("wait", "WAIT", tuple(world.agent.xy), {}, 1.0, 1e9, (), "persist"))
         hidden_step = engine.step(world.observe())
         if 11 not in hidden_step.belief.entities:

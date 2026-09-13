@@ -61,6 +61,40 @@ def test_hidden_entity_persists() -> None:
     assert out.belief.entities[11].uncertainty > 0.1
 
 
+def test_occluded_survives_past_persistence_window() -> None:
+    cfg = LabConfig(seed=11, persistence_steps=8, retirement_uncertainty=0.95)
+    world = SyntheticWorld(cfg)
+    engine = MinakanushiLabEngine(cfg)
+    first = engine.step(world.observe())
+    assert 11 in first.belief.entities
+    world.hidden_ids.add(11)
+    wait = ActionIntent("wait", "WAIT", tuple(world.agent.xy), {}, 1.0, 1e9, (), "t")
+    out = first
+    for _ in range(cfg.persistence_steps + 6):
+        world.step(wait)
+        out = engine.step(world.observe())
+        assert 11 in out.belief.entities
+    assert 11 in world.observe().occluded_ids
+    assert out.belief.entities[11].uncertainty >= cfg.retirement_uncertainty
+    assert out.belief.entities[11].missing_steps > cfg.persistence_steps
+
+
+def test_gone_forever_retires_after_window() -> None:
+    cfg = LabConfig(seed=11, persistence_steps=4)
+    world = SyntheticWorld(cfg)
+    engine = MinakanushiLabEngine(cfg)
+    first = engine.step(world.observe())
+    assert 11 in first.belief.entities
+    world.removed_ids.add(11)
+    wait = ActionIntent("wait", "WAIT", tuple(world.agent.xy), {}, 1.0, 1e9, (), "t")
+    out = first
+    for _ in range(cfg.persistence_steps + 2):
+        world.step(wait)
+        out = engine.step(world.observe())
+        assert 11 not in world.observe().occluded_ids
+    assert 11 not in out.belief.entities
+
+
 def test_hard_zone_beats_high_value() -> None:
     engine = MinakanushiLabEngine(LabConfig(seed=11))
     engine.step(SyntheticWorld(LabConfig(seed=11)).observe())
