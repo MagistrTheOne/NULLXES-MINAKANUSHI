@@ -190,6 +190,81 @@ def counterfactual_separation_score(future_a: Tensor, future_b: Tensor) -> Tenso
     return torch.linalg.vector_norm(future_a - future_b, dim=-1).mean()
 
 
+def slot_error_attribution(
+    pred_xy: Tensor,
+    true_xy: Tensor,
+    aligned_mask: Tensor,
+    *,
+    entity_id: Tensor | None = None,
+    kind: Tensor | None = None,
+    occupied: Tensor | None = None,
+    age_unobserved: Tensor | None = None,
+    top_k: int = 3,
+) -> dict:
+    """Attribute state-prediction error to exact world slots. Diagnostic only.
+
+    pred_xy/true_xy: [B, N, 2]. aligned_mask [B, N]: slots with a GT match.
+    entity_id/kind/occupied/age_unobserved come straight from the same
+    WorldState slots as pred_xy, so the slot→entity association is
+    trustworthy by construction. If identity tensors are absent, slot index
+    is still reported and eid is explicitly marked unavailable — never
+    invented. No tensors in the output; JSON-safe.
+    """
+    from minakanushi.architecture.mina_unit import KIND_IDS
+
+    names = {int(v): k for k, v in KIND_IDS.items()}
+    per_slot = torch.linalg.vector_norm(pred_xy.detach() - true_xy.detach(), dim=-1)
+    mask = aligned_mask.to(torch.bool)
+    hits: list[tuple[float, int, int]] = []
+    for b in range(per_slot.shape[0]):
+        for s in range(per_slot.shape[1]):
+            if bool(mask[b, s]):
+                hits.append((float(per_slot[b, s].item()), int(b), int(s)))
+    hits.sort(key=lambda row: row[0], reverse=True)
+    top: list[dict] = []
+    for err, b, s in hits[: max(int(top_k), 1)]:
+        row: dict = {"slot": s, "batch": b, "slot_error": err}
+        if entity_id is not None:
+            row["eid"] = int(entity_id[b, s].item())
+            row["eid_available"] = True
+        else:
+            row["eid"] = None
+            row["eid_available"] = False
+        if kind is not None:
+            kid = int(kind[b, s].item())
+            row["kind_id"] = kid
+            row["kind"] = names.get(kid, "unknown")
+        else:
+            row["kind_id"] = None
+            row["kind"] = None
+        if occupied is not None:
+            row["occupied"] = bool(occupied[b, s].item())
+        else:
+            row["occupied"] = None
+        if age_unobserved is not None:
+            row["age_unobserved"] = float(age_unobserved[b, s].item())
+            row["observed"] = bool(float(age_unobserved[b, s].item()) == 0.0)
+        else:
+            row["age_unobserved"] = None
+            row["observed"] = None
+        top.append(row)
+    aligned_mean = sum(e for e, _, _ in hits) / len(hits) if hits else 0.0
+    unobs = [
+        e
+        for e, b, s in hits
+        if age_unobserved is not None and float(age_unobserved[b, s].item()) > 0.0
+    ]
+    return {
+        "top_error_slot": top[0]["slot"] if top else None,
+        "top_error": top[0] if top else None,
+        "top3": top,
+        "n_aligned": len(hits),
+        "occupied_mean_error": aligned_mean,
+        "unobserved_mean_error": (sum(unobs) / len(unobs)) if unobs else 0.0,
+        "n_unobserved": len(unobs),
+    }
+
+
 def counterfactual_layers(
     future_a: Tensor,
     future_b: Tensor,

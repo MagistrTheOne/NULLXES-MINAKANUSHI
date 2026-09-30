@@ -22,7 +22,7 @@ from minakanushi.state.constructor import StateConstructor, empty_world_state
 from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.strategy.hold import HOLD_MODE
 from minakanushi.training.checkpoint import save_mina
-from minakanushi.training.episode_dataset import JsonEpisodeDataset
+from minakanushi.training.episode_dataset import JsonEpisodeDataset, dataset_row_provenance
 from minakanushi.training.metrics import (
     assemble_bundle,
     branch_diversity,
@@ -31,6 +31,7 @@ from minakanushi.training.metrics import (
     masked_mse,
     memory_effect_delta,
     policy_firewall_metrics,
+    slot_error_attribution,
 )
 from minakanushi.training.phase_sampler import PhaseCurriculumSampler, mode_for_job_step
 from minakanushi.training.objectives import compute_objectives
@@ -99,6 +100,17 @@ def _weighted_terms(terms: dict, training) -> dict[str, float]:
     return out
 
 
+def slot_top(log: TrainLog) -> str:
+    """Compact top-slot summary for the step line. Logging only."""
+    try:
+        top = (log.slot_attribution or {}).get("top_error") or {}
+        if top.get("slot") is None:
+            return "-"
+        return f"s{top.get('slot')}:eid{top.get('eid')}:{top.get('kind')}:e={float(top.get('slot_error', 0.0)):.2f}"
+    except (ValueError, TypeError, AttributeError):
+        return "?"
+
+
 @dataclass
 class TrainLog:
     step: int
@@ -114,6 +126,12 @@ class TrainLog:
     grad_norm_after: float = 0.0
     lr: float = 0.0
     weighted_terms: dict[str, float] | None = None
+    # Provenance + slot attribution (v0.3.2 diagnostic patch, logging only).
+    scenario: str | None = None
+    train_row: int | None = None
+    episode_path: str | None = None
+    phase: str | None = None
+    slot_attribution: dict | None = None
 
 
 @dataclass
@@ -151,6 +169,12 @@ class UnrollPacket:
     has_evidence: Tensor
     occupied_before: Tensor
     n_constructor_corrections: int
+    # Provenance: dataset row for JSON episodes; None/"generated" for synthetic.
+    train_row: int | None = None
+    episode_path: str | None = None
+    phase: str | None = None
+    provenance_source: str = "unknown"
+    slot_attribution: dict | None = None
 
 
 def _align(pred_ids: Tensor, pred_occ: Tensor, true_ids: Tensor, true_xy: Tensor, true_vel: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -271,6 +295,7 @@ class Trainer:
                     self.dataset.paths, self.dataset.phases, seed=train.seed
                 )
         self.dataset_cursor = 0
+        self._last_prov: dict = {}
         self._resume_extras: dict = {}
 
     def resume_from(self, path: Path) -> None:
@@ -299,18 +324,34 @@ class Trainer:
         arch = self.config.architecture
         if self.dataset is not None:
             if scenario is not None:
-                return self.dataset.episode_for_scenario(scenario, int(episode_index or 0))
+                hits = [i for i, name in enumerate(self.dataset.scenarios) if name == scenario]
+                if not hits:
+                    raise FileNotFoundError(f"no JSON episode with scenario={scenario!r} under {self.dataset.root}")
+                idx = hits[int(episode_index or 0) % len(hits)]
+                self._last_prov = {"source": "dataset", **dataset_row_provenance(self.dataset.paths, self.dataset.phases, idx)}
+                return self.dataset.episode(idx)
             if episode_index is not None:
-                return self.dataset.episode(int(episode_index))
+                idx = int(episode_index)
+                self._last_prov = {"source": "dataset", **dataset_row_provenance(self.dataset.paths, self.dataset.phases, idx)}
+                return self.dataset.episode(idx)
             mode = self._sampler_mode(step)
             if self.sampler is not None and mode in {"warm", "intelligence"}:
                 idx = self.sampler.choose(step, mode)
             else:
                 idx = (step - 1) % len(self.dataset)
             self.dataset_cursor = int(idx)
-            return self.dataset.episode(idx)
+            self._last_prov = {"source": "dataset", **dataset_row_provenance(self.dataset.paths, self.dataset.phases, int(idx))}
+            return self.dataset.episode(int(idx))
         ep_idx = int(episode_index) if episode_index is not None else (step - 1) % max(train.n_overfit_episodes, 1)
         scenario_name = scenario or TRAIN_CURRICULUM[ep_idx % len(TRAIN_CURRICULUM)]
+        self._last_prov = {
+            "source": "synthetic",
+            "train_row": None,
+            "episode_path": None,
+            "phase": None,
+            "scenario": scenario_name,
+            "episode_index": int(ep_idx),
+        }
         return generate_episode(
             self.config.simulation,
             seed=int(seed) if seed is not None else train.seed,
@@ -359,9 +400,23 @@ class Trainer:
     ) -> UnrollPacket:
         train = self.config.training
         arch = self.config.architecture
+        explicit = episode is not None
         episode = episode or self._load_episode(
             step, scenario=scenario, episode_index=episode_index, seed=seed, length=length
         )
+        if explicit:
+            prov = {
+                "source": "explicit",
+                "train_row": None,
+                "episode_path": None,
+                "phase": None,
+                "scenario": str(episode.scenario),
+                "episode_index": int(episode.episode_index),
+            }
+        else:
+            prov = dict(self._last_prov or {})
+            prov.setdefault("scenario", str(episode.scenario))
+            prov.setdefault("episode_index", int(episode.episode_index))
         ep_idx = int(episode.episode_index)
         idx = training_frame(episode.scenario, len(episode.observations))
         obs = episode.observations[idx]
@@ -477,6 +532,15 @@ class Trainer:
             entity_id=world.entity_id,
         )
         assert_finite("loss.total", breakdown.total)
+        slot_attr = slot_error_attribution(
+            pred.entity_xy,
+            aligned_xy,
+            aligned_occ,
+            entity_id=pred.entity_id,
+            kind=pred.kind,
+            occupied=pred.occupied,
+            age_unobserved=pred.age_unobserved,
+        )
         return UnrollPacket(
             packed=packed,
             packed_n=packed_n,
@@ -511,6 +575,11 @@ class Trainer:
             has_evidence=has_evidence,
             occupied_before=occupied_before,
             n_constructor_corrections=len(constructed.corrections),
+            train_row=prov.get("train_row"),
+            episode_path=prov.get("episode_path"),
+            phase=prov.get("phase"),
+            provenance_source=str(prov.get("source", "unknown")),
+            slot_attribution=slot_attr,
         )
 
     def _metrics(self, pkt: UnrollPacket) -> dict[str, float]:
@@ -653,6 +722,11 @@ class Trainer:
             grad_norm_after=grad_norm_after,
             lr=lr_now,
             weighted_terms=_weighted_terms(pkt.breakdown.terms, self.config.training),
+            scenario=pkt.scenario,
+            train_row=pkt.train_row,
+            episode_path=pkt.episode_path,
+            phase=pkt.phase,
+            slot_attribution=pkt.slot_attribution,
         )
 
     def fit(self, out_dir: Path, *, resume: Path | None = None) -> list[TrainLog]:
@@ -673,7 +747,8 @@ class Trainer:
                     print(
                         f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} "
                         f"grad_before={log.grad_norm_before:.4f} grad_after={log.grad_norm_after:.4f} "
-                        f"lr={log.lr:.6f} fwd={self._last_forward_s:.3f}s "
+                        f"lr={log.lr:.6f} sc={log.scenario} row={log.train_row} "
+                        f"top_slot={slot_top(log)} fwd={self._last_forward_s:.3f}s "
                         f"bwd={self._last_backward_s:.3f}s terms={log.terms} weighted={log.weighted_terms}",
                         flush=True,
                     )
@@ -681,6 +756,9 @@ class Trainer:
                 eval_row = {
                     "step": step,
                     "loss": log.loss,
+                    "scenario": log.scenario,
+                    "train_row": log.train_row,
+                    "phase": log.phase,
                     "future_ADE": log.metrics.get("future_ADE"),
                     "future_FDE": log.metrics.get("future_FDE"),
                     "revision_accuracy": log.metrics.get("revision_accuracy"),
@@ -691,7 +769,7 @@ class Trainer:
                     "terms": log.terms,
                 }
                 with metrics_path.open("a", encoding="utf-8") as fh:
-                    fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "weighted_terms": log.weighted_terms, "grad_before": log.grad_norm_before, "grad_after": log.grad_norm_after, "lr": log.lr, "metrics": log.metrics}) + "\n")
+                    fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "weighted_terms": log.weighted_terms, "grad_before": log.grad_norm_before, "grad_after": log.grad_norm_after, "lr": log.lr, "scenario": log.scenario, "train_row": log.train_row, "episode_path": log.episode_path, "phase": log.phase, "slot_attribution": log.slot_attribution, "metrics": log.metrics}) + "\n")
                 with (out_dir / "experiment.jsonl").open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(eval_row) + "\n")
                 print(

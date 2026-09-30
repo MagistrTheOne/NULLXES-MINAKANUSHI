@@ -21,6 +21,18 @@ def scenario_from_episode_id(episode_id: str) -> str:
     return parts[0]
 
 
+def dataset_row_provenance(paths, phases, idx: int) -> dict:
+    """Deterministic provenance for one dataset row. Pure function.
+
+    paths/phases are the parallel JsonEpisodeDataset index tuples.
+    Same idx always yields the same row. No I/O, no RNG.
+    """
+    i = int(idx)
+    if i < 0 or i >= len(paths):
+        raise IndexError(f"dataset row {i} out of range for {len(paths)} rows")
+    return {"train_row": i, "episode_path": str(paths[i]), "phase": str(phases[i])}
+
+
 class JsonEpisodeDataset:
     def __init__(
         self,
