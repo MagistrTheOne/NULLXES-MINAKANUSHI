@@ -241,6 +241,13 @@ class Trainer:
                 foreach=False,
             )
             self.scheduler = WarmupScheduler(self.opt, train.warmup_steps, train.learning_rate)
+            if int(train.warmup_steps) > 0:
+                # Warmup off-by-one fix (v0.3.2): scheduler.step() runs AFTER
+                # opt.step(), so without this the very first update trains at
+                # full base LR. Seed the ramp at 1/warmup explicitly.
+                first_lr = float(config.training.learning_rate) / float(train.warmup_steps)
+                for group in self.opt.param_groups:
+                    group["lr"] = first_lr
         self.constraints = MinakanushiConstraintKernel(config.simulation)
         self.policy = ActionPolicy()
         self._last_forward_s = 0.0
