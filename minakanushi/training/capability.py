@@ -150,6 +150,26 @@ def gate_c_causality(trainer: Trainer) -> dict[str, Any]:
     detected = float(metrics["revision_detected"])
     picture_in_picture_out = detected <= 0.0
     proven = (not picture_in_picture_out) and pkt.scenario == "unexpected_stop"
+    # v0.3.2 diagnostic fields only — no causal/revision semantics change.
+    # Observable failure path: prev hypothesis -> evidence -> score -> target.
+    diag: dict[str, Any] = {}
+    try:
+        import torch as _torch
+
+        diag = {
+            "prev_velocity_hypothesis": pkt.pred.entity_vel.detach().cpu().float().mean().item(),
+            "evidence_xy_mean": pkt.evidence_xy.detach().cpu().float().mean().item(),
+            "before_xy_mean": pkt.before_xy.detach().cpu().float().mean().item(),
+            "should_revise_count": int(pkt.should_revise.sum().item()),
+            "has_evidence_count": int(pkt.has_evidence.sum().item()),
+            "revision_direction": metrics.get("revision_direction_accuracy"),
+            "revision_magnitude_error": metrics.get("revision_magnitude_error"),
+            "false_revision_rate": metrics.get("false_revision_rate"),
+            "n_need": metrics.get("revision_n_need"),
+            "n_detected": metrics.get("revision_n_detected"),
+        }
+    except (RuntimeError, ValueError, AttributeError):
+        diag = {"diagnostic": "unavailable"}
     return {
         "gate": "C_causality",
         "claim": "external event unexpected_physics, revision = velocity hypothesis invalid. Not new-picture → new-answer.",
@@ -160,6 +180,7 @@ def gate_c_causality(trainer: Trainer) -> dict[str, Any]:
         "revision_detected": detected,
         "picture_in_picture_out": picture_in_picture_out,
         "capability_proven": proven,
+        "diagnostic": diag,
         "pass": proven,
     }
 
@@ -176,12 +197,28 @@ def gate_d_counterfactual(trainer: Trainer) -> dict[str, Any]:
     distance = float(counterfactual_separation_score(pkt.pred_future[0, -1], pkt.alt_future[0, -1]).detach())
     labeled = pkt.candidates[0].objective
     alt = pkt.candidates[1].objective
+    # Fork-A (v0.3.2): legacy all-512 mean preserved for v0.3.1 comparability;
+    # meaningful layers reported alongside. No retrain from this change.
+    layers: dict[str, float] = {}
+    try:
+        from minakanushi.training.metrics import counterfactual_layers
+
+        raw = counterfactual_layers(
+            pkt.pred_future[0, -1], pkt.alt_future[0, -1], pkt.aligned_occ
+        )
+        layers = {k: float(v.detach()) for k, v in raw.items()}
+    except (ValueError, RuntimeError):
+        layers = {}
     return {
         "gate": "D_counterfactual",
         "claim": "same observation, WAIT vs MOVE_TO, Future A ≠ Future B. Distance≈0 means no world model.",
         "action_a": labeled,
         "action_b": alt,
         "future_distance": distance,
+        "future_distance_legacy_all_slots": distance,
+        "future_distance_occupied": layers.get("occupied_cf"),
+        "future_distance_agent": layers.get("agent_cf"),
+        "future_frobenius": layers.get("frobenius"),
         "pass": distance > COUNTERFACTUAL_MIN and {labeled, alt} == {"WAIT", "MOVE_TO"},
     }
 

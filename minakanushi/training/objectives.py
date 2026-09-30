@@ -47,7 +47,15 @@ def counterfactual_separation(pred_a: Tensor, pred_b: Tensor, margin: float) -> 
 
 
 def belief_nll(mean: Tensor, std: Tensor, true: Tensor, mask: Tensor) -> Tensor:
-    """Gaussian NLL of GT under (mean, std). mask [B, N] bool/float."""
+    """Gaussian NLL of GT under (mean, std). mask [B, N] bool/float.
+
+    Scale note (v0.3.2 audit, formula unchanged): per-slot term is
+    0.5*(((e/s)^2)+2*log s). At error=1.0/std=0.1 this is ~50/slot, so a
+    raw value like 177 with occupied-masked mean reduction is a correct
+    output of this formula, not a reduction bug. Masking (occupied only),
+    empty-slot exclusion, and batch/time mean reduction were verified;
+    stabilize via lambda_belief (smoke uses 0.05), not by rescaling here.
+    """
     sigma = std.clamp_min(1e-3)
     nll = 0.5 * (((mean - true) / sigma).pow(2) + 2.0 * torch.log(sigma)).sum(dim=-1)
     weights = mask.to(nll.dtype)

@@ -1,0 +1,44 @@
+stage: 0
+name: recurrent_smoke_t8_cpu
+architecture: configs/architecture/cpu_dev.yaml
+simulation: configs/simulation/milestone1.yaml
+dataset_name: stage0_synthetic
+n_overfit_episodes: 16
+
+seed: 7
+steps: 50
+batch_size: 1
+sequence_length: 8
+learning_rate: 0.0001
+weight_decay: 0.0
+grad_clip: 1.0
+log_every: 5
+eval_every: 10
+checkpoint_every: 50
+warmup_steps: 50
+
+precision: float32
+device: cpu
+parallelism: none
+activation_checkpoint: false
+warm_steps: 16
+
+# Belief lambda intentionally 0.05 for smoke: belief_nll scale is
+# ~50 per slot at error=1.0/std=0.1 (0.5*((e/s)^2+2log s)), so 1.0
+# dominates total. Formula verified correct (occupied-masked mean);
+# do NOT "fix" by rescaling the objective. See objectives.py note.
+lambdas:
+  state: 1.0
+  temporal: 1.0
+  future: 0.8
+  uncertainty: 0.3
+  causal: 0.4
+  memory: 0.6
+  action: 0.4
+  representation: 0.05
+  belief: 0.05
+  revision: 1.0
+
+regularizer:
+  isotropic_weight: 0.05
+  counterfactual_margin: 0.25

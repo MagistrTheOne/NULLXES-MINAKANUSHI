@@ -65,6 +65,40 @@ def counterfactual_candidate(truth, agent_xy: tuple[float, float], simulation) -
     return StrategyCandidate("wait", "WAIT", agent_xy, 0.0, 0.0)
 
 
+def _post_clip_norm(parameters) -> float:
+    """Post-clip grad norm. clip_grad_norm_mixed returns pre-clip; recompute after."""
+    import math
+
+    total = 0.0
+    for p in list(parameters):
+        g = getattr(p, "grad", None)
+        if g is None:
+            continue
+        try:
+            total += float(g.detach().float().norm(2).item()) ** 2
+        except (RuntimeError, ValueError):
+            continue
+    return float(math.sqrt(total))
+
+
+def _weighted_terms(terms: dict, training) -> dict[str, float]:
+    """Raw term * lambda. Shows who owns total. No semantics change."""
+    lam = training.lambdas
+    out: dict[str, float] = {}
+    for name, tensor in terms.items():
+        try:
+            raw = float(tensor.item())
+        except (AttributeError, ValueError):
+            raw = float(tensor)
+        weight = float(getattr(lam, name, 0.0)) if name in {
+            "state", "temporal", "future", "uncertainty",
+            "causal", "memory", "action", "representation",
+            "belief", "revision",
+        } else 0.0
+        out[name] = raw * weight
+    return out
+
+
 @dataclass
 class TrainLog:
     step: int
@@ -73,6 +107,13 @@ class TrainLog:
     grad_norm: float
     traj_error: float
     metrics: dict[str, float] | None = None
+    # Divergence instrumentation (v0.3.2 patch set, no semantics change):
+    # grad_norm = pre-clip total (returned by clip_grad_norm_mixed),
+    # grad_norm_after = post-clip total, lr = current optimizer LR.
+    grad_norm_before: float = 0.0
+    grad_norm_after: float = 0.0
+    lr: float = 0.0
+    weighted_terms: dict[str, float] | None = None
 
 
 @dataclass
@@ -574,7 +615,9 @@ class Trainer:
         t1 = perf_counter()
         self.opt.zero_grad(set_to_none=True)
         pkt.breakdown.total.backward()
-        grad_norm = clip_grad_norm_mixed(self.system.parameters(), self.config.training.grad_clip)
+        lr_now = float(self.opt.param_groups[0]["lr"]) if self.opt.param_groups else 0.0
+        grad_norm_before = clip_grad_norm_mixed(self.system.parameters(), self.config.training.grad_clip)
+        grad_norm_after = _post_clip_norm(self.system.parameters())
         self.opt.step()
         self.scheduler.step()
         self._last_backward_s = perf_counter() - t1
@@ -596,9 +639,13 @@ class Trainer:
             step=step,
             loss=float(pkt.breakdown.total.item()),
             terms={k: float(v.item()) for k, v in pkt.breakdown.terms.items()},
-            grad_norm=grad_norm,
+            grad_norm=grad_norm_before,
             traj_error=traj_error,
             metrics=metrics,
+            grad_norm_before=grad_norm_before,
+            grad_norm_after=grad_norm_after,
+            lr=lr_now,
+            weighted_terms=_weighted_terms(pkt.breakdown.terms, self.config.training),
         )
 
     def fit(self, out_dir: Path, *, resume: Path | None = None) -> list[TrainLog]:
@@ -618,8 +665,9 @@ class Trainer:
                 if is_rank0():
                     print(
                         f"step={step} loss={log.loss:.4f} traj_err={log.traj_error:.4f} "
-                        f"grad={log.grad_norm:.4f} fwd={self._last_forward_s:.3f}s "
-                        f"bwd={self._last_backward_s:.3f}s terms={log.terms}",
+                        f"grad_before={log.grad_norm_before:.4f} grad_after={log.grad_norm_after:.4f} "
+                        f"lr={log.lr:.6f} fwd={self._last_forward_s:.3f}s "
+                        f"bwd={self._last_backward_s:.3f}s terms={log.terms} weighted={log.weighted_terms}",
                         flush=True,
                     )
             if log.metrics is not None and is_rank0():
@@ -636,7 +684,7 @@ class Trainer:
                     "terms": log.terms,
                 }
                 with metrics_path.open("a", encoding="utf-8") as fh:
-                    fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "metrics": log.metrics}) + "\n")
+                    fh.write(json.dumps({"step": step, "loss": log.loss, "terms": log.terms, "weighted_terms": log.weighted_terms, "grad_before": log.grad_norm_before, "grad_after": log.grad_norm_after, "lr": log.lr, "metrics": log.metrics}) + "\n")
                 with (out_dir / "experiment.jsonl").open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(eval_row) + "\n")
                 print(

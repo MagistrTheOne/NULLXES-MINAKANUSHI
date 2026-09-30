@@ -68,18 +68,37 @@ class NoEnterRestricted(ConstraintRule):
 
 
 class NoCollideObstacle(ConstraintRule):
+    # v0.3.2: trajectory check added. Target-only check allowed plans
+    # through obstacles with a clean goal. Agent half-footprint 0.2
+    # (Body size [0.4,0.4]) expands the box. Fail closed.
+    AGENT_MARGIN = 0.2
+
     def __init__(self) -> None:
         super().__init__("no_collide_obstacle", ConstraintClass.HARD, "do not plan through obstacles")
 
     def evaluate(self, candidate, trajectory, simulation):
+        boxes = []
         for obs in simulation.obstacles:
             ox, oy = float(obs["xy"][0]), float(obs["xy"][1])
             sx, sy = float(obs.get("size", [1.0, 1.0])[0]), float(obs.get("size", [1.0, 1.0])[1])
-            x0, x1 = ox - sx / 2, ox + sx / 2
-            y0, y1 = oy - sy / 2, oy + sy / 2
+            m = self.AGENT_MARGIN
+            boxes.append((
+                ox - sx / 2 - m, ox + sx / 2 + m,
+                oy - sy / 2 - m, oy + sy / 2 + m,
+                obs.get("id"),
+            ))
+        points = [candidate.target_xy]
+        if trajectory is not None:
+            agent = trajectory.states_xy[:, AGENT_SLOT]
+            points.extend((float(p[0].item()), float(p[1].item())) for p in agent)
+        for x0, x1, y0, y1, oid in boxes:
             tx, ty = candidate.target_xy
             if x0 <= tx <= x1 and y0 <= ty <= y1:
-                return False, f"no_collide_obstacle target inside obstacle {obs.get('id')}"
+                return False, f"no_collide_obstacle target inside obstacle {oid}"
+            if trajectory is not None:
+                for i, (x, y) in enumerate(points[1:]):
+                    if x0 <= x <= x1 and y0 <= y <= y1:
+                        return False, f"no_collide_obstacle trajectory step {i} at ({x:.2f},{y:.2f}) inside obstacle {oid}"
         return True, "no_collide_obstacle ok"
 
 
