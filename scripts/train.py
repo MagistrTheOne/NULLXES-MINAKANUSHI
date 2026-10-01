@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+# Allow `python scripts/train.py` from the repo root without PYTHONPATH setup.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import torch
 

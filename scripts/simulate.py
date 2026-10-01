@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+# Allow `python scripts/simulate.py` from the repo root without PYTHONPATH setup.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from minakanushi.architecture.config import load_config
 from minakanushi.policy.intent import ActionIntent
