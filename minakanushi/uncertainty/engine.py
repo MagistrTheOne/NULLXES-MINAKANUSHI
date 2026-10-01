@@ -57,8 +57,10 @@ class UncertaintyEngine(nn.Module):
         channels = torch.stack(cols, dim=-1)
         occupied = world.occupied.to(channels.dtype).unsqueeze(-1)
         channels = channels * occupied
-        world.uncertainty = channels
         mean_u = channels.mean(dim=-1)
+        # NOTE: no world.uncertainty write here. The caller commits
+        # channels to WorldState at exactly one explicit point, so the
+        # prediction input cannot change under FutureEngine.
         return UncertaintyState(
             observation_uncertainty=noisy,
             state_uncertainty=mean_u,

@@ -113,12 +113,14 @@ class SyntheticWorld:
     def _velocity_from_intent(self, intent: ActionIntent) -> np.ndarray:
         if is_hold(intent.objective):
             return np.zeros(2)
+        from minakanushi.strategy.speed import clamp_speed, commanded_speed
+
+        speed = clamp_speed(commanded_speed(intent), self.config.max_speed)
         target = np.array(intent.target_state, dtype=np.float64)
         delta = target - self.agent.xy
         norm = np.linalg.norm(delta)
         if norm < 1e-6:
             return np.zeros(2)
-        speed = min(self.config.max_speed, 1.0)
         return (delta / norm) * speed
 
     def _integrate(self, xy: np.ndarray, vel: np.ndarray, dt: float, moving: bool, bounce: bool = False) -> np.ndarray:

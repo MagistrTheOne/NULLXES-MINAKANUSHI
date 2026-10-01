@@ -19,8 +19,18 @@ from minakanushi.strategy.candidate import StrategyCandidate
 
 class MinakanushiConstraintKernel:
     def __init__(self, simulation: SimulationConfig) -> None:
+        unknown = [name for name in simulation.hard_constraints if name not in RULE_REGISTRY]
+        if unknown:
+            raise ValueError(
+                f"unknown hard_constraints={unknown!r} expected={sorted(RULE_REGISTRY)!r} got={list(simulation.hard_constraints)!r}"
+            )
+        if not simulation.hard_constraints and not simulation.allow_empty_hard_constraints:
+            raise ValueError(
+                "hard_constraints is empty; refusing fail-open kernel "
+                "(set allow_empty_hard_constraints=true to override explicitly)"
+            )
         self.simulation = simulation
-        self.rules = tuple(RULE_REGISTRY[name]() for name in simulation.hard_constraints if name in RULE_REGISTRY)
+        self.rules = tuple(RULE_REGISTRY[name]() for name in simulation.hard_constraints)
 
     def filter(
         self,

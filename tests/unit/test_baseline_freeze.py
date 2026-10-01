@@ -14,8 +14,9 @@ from minakanushi.training.baseline import inspect_mina, write_baseline
 
 
 def _write_mina(path: Path) -> None:
+    from safetensors.torch import save as _sft_save
+
     system = {"weight": torch.randn(8, 8), "bias": torch.randn(8)}
-    payload = {"system": system, "optimizer": {"exp_avg": torch.ones(4)}, "runtime": {"rng": "present"}}
     manifest = {
         "architecture": "MINAKANUSHI",
         "organization": "NULLXES",
@@ -25,9 +26,12 @@ def _write_mina(path: Path) -> None:
     }
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("manifest.yaml", yaml.safe_dump(manifest, sort_keys=False))
-        buf = io.BytesIO()
-        torch.save(payload, buf)
-        zf.writestr("weights.pt", buf.getvalue())
+        zf.writestr("weights/system-00000.safetensors", _sft_save(system))
+        zf.writestr("weights/tensors_index.json", json.dumps(
+            {"weight_map": {"weight": "weights/system-00000.safetensors",
+                            "bias": "weights/system-00000.safetensors"}}))
+        zf.writestr("weights/optimizer.safetensors", _sft_save({"state.0.exp_avg": torch.ones(4)}))
+        zf.writestr("weights/sidecar.json", json.dumps({"schema_version": 1}))
 
 
 def test_inspect_mina_hashes_and_lists_resume_keys(tmp_path: Path) -> None:

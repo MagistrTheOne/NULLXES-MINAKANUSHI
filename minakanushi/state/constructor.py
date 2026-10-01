@@ -19,7 +19,6 @@ from minakanushi.state.world import (
     BELIEF_STD_MIN,
     COAST_STD_GAIN,
     EXISTENCE_DECAY,
-    MEMORY_MEAN_GAIN,
     PRED_CONF_DECAY,
     WorldState,
 )
@@ -120,8 +119,16 @@ class StateConstructor:
                 if not bool(units.mask[b, i]):
                     continue
                 eid = int(units.entity_id[b, i].item())
-                existed = bool(((entity_id[b] == eid) & occupied[b]).any()) if eid != 0 else False
-                slot = self._find_or_allocate(entity_id[b], occupied[b], eid)
+                if eid == 0:
+                    # Unknown entity reference carries no identity to bind.
+                    # Allocating a slot per eid==0 observation exhausts
+                    # world_slots under spam; skip instead of binding.
+                    continue
+                existed = bool(((entity_id[b] == eid) & occupied[b]).any())
+                slot = self._find_or_allocate(
+                    entity_id[b], occupied[b], eid,
+                    age=previous.age_unobserved[b], confidence=confidence[b],
+                )
                 observed_last = existed and float(previous.age_unobserved[b, slot].item()) == 0.0
                 occupied[b, slot] = True
                 entity_id[b, slot] = eid
@@ -204,9 +211,14 @@ class StateConstructor:
         persist_horizon = age <= float(self.config.persistence.steps)
         if memory_hints is not None:
             assert_shape("memory_hints", memory_hints, (batch, n_slots, dim))
+            fusion = self.config.memory_fusion
             inject = occupied & (~updated) & persist_horizon
-            latent = torch.where(inject.unsqueeze(-1), 0.7 * latent + 0.3 * memory_hints, latent)
-            prior = MEMORY_MEAN_GAIN * torch.tanh(memory_hints[..., :2])
+            latent = torch.where(
+                inject.unsqueeze(-1),
+                fusion.latent_keep * latent + (1.0 - fusion.latent_keep) * memory_hints,
+                latent,
+            )
+            prior = fusion.xy_gain * torch.tanh(memory_hints[..., :2])
             xy = torch.where(inject.unsqueeze(-1), xy + prior, xy)
 
         persist = occupied & (~updated) & persist_horizon
@@ -265,17 +277,53 @@ class StateConstructor:
             corrections=tuple(corrections),
         )
 
-    def _find_or_allocate(self, ids: Tensor, occupied: Tensor, eid: int) -> int:
+    def _find_or_allocate(
+        self,
+        ids: Tensor,
+        occupied: Tensor,
+        eid: int,
+        *,
+        age: Tensor | None = None,
+        confidence: Tensor | None = None,
+    ) -> int:
         matches = (ids == eid) & occupied
         if bool(matches.any()) and eid != 0:
             return int(matches.nonzero(as_tuple=False)[0].item())
         free = (~occupied).nonzero(as_tuple=False)
         if free.numel() == 0:
-            ages = occupied.to(torch.float32)
-            ages[AGENT_SLOT] = -1.0
-            return int(torch.argmax(ages).item())
+            return self._evict_slot(ids, occupied, age=age, confidence=confidence)
         slot = int(free[0].item())
         if slot == AGENT_SLOT and eid != 1:
             if free.numel() > 1:
                 return int(free[1].item())
         return slot
+
+    @staticmethod
+    def _evict_slot(
+        ids: Tensor,
+        occupied: Tensor,
+        *,
+        age: Tensor | None,
+        confidence: Tensor | None,
+    ) -> int:
+        """Stalest-first eviction. Never the agent slot.
+
+        score = age_unobserved * (1 - confidence): long-unseen,
+        low-confidence hypotheses go first. Ties break toward the
+        highest entity id for determinism.
+        """
+        n = occupied.numel()
+        best = -1
+        best_score = float("-inf")
+        for slot in range(n):
+            if slot == AGENT_SLOT or not bool(occupied[slot]):
+                continue
+            slot_age = float(age[slot].item()) if age is not None else 0.0
+            slot_conf = float(confidence[slot].item()) if confidence is not None else 0.5
+            score = slot_age * (1.0 - slot_conf) + 1e-6 * float(ids[slot].item())
+            if score > best_score:
+                best_score = score
+                best = slot
+        if best < 0:
+            raise RuntimeError("StateConstructor: no evictable slot (only the agent is occupied)")
+        return best

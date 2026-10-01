@@ -47,7 +47,7 @@ class MemoryEngine(nn.Module):
             retrieved = self.read_proj(self.episodic.retrieve_for_slots(world))
             live_path = False
         working = self.working.readout(world.latent_state.shape[1], world.latent_state.shape[2])
-        hints = retrieved + 0.2 * working
+        hints = retrieved + self.config.memory_fusion.working_gain * working
         stats: dict = {"live_path": live_path}
         try:
             occ = world.occupied[0]

@@ -174,16 +174,41 @@ class MinakanushiEngine:
         ):
             self_model.experience.append(record)
         focus = self.focus_engine.select(world, self_model.experience, float(observations.timestamp))
-        sit = self.situation.build(world, self.system.uncertainty(world, packed), (), focus=focus)
+        # Single explicit commit point for this cycle (see model.observe_to_core).
+        unc_state = self.system.uncertainty(world, packed)
+        world.uncertainty = unc_state.channels
+        sit = self.situation.build(world, unc_state, (), focus=focus)
         candidates = list(self.strategy.generate(sit, self.config.simulation.home))
         if operator_intent is not None:
             extra = candidate_from_intent(operator_intent)
             if extra.strategy_id not in {c.strategy_id for c in candidates}:
                 candidates.append(extra)
-        futures = self.system.future.predict(world, candidates)
+        cem_refined = 0
+        planner = arch.planner
+        if planner.enabled:
+            from minakanushi.future.engine import cem_refine
+
+            goal = self._goal(sit)
+            refined: list = []
+            for cand in candidates:
+                if cand.objective in ("MOVE_TO", "RETURN", "FOLLOW", "INSPECT"):
+                    best, _ = cem_refine(
+                        self.system.future, world, cand, goal,
+                        max_speed=self.config.simulation.max_speed,
+                        horizon=arch.prediction_horizons.short,
+                        iters=planner.iters, samples=planner.samples,
+                        std=planner.std, rng_seed=planner.seed,
+                    )
+                    refined.append(best)
+                    cem_refined += 1
+            candidates.extend(refined)
+        futures = self.system.future.predict(world, candidates, max_speed=self.config.simulation.max_speed)
         by_id = group_by_strategy(futures)
         allowed, rejected, audits = self.constraints.filter(candidates, by_id)
-        proposal = self.policy.select(allowed, by_id, self._goal(sit), observations.timestamp)
+        proposal = self.policy.select(
+            allowed, by_id, self._goal(sit), observations.timestamp,
+            max_speed=self.config.simulation.max_speed,
+        )
         intent = authority.resolve(
             self.policy,
             allowed,
@@ -191,13 +216,16 @@ class MinakanushiEngine:
             self._goal(sit),
             observations.timestamp,
             operator_intent=operator_intent,
+            max_speed=self.config.simulation.max_speed,
         )
         reasons = tuple(r for audit in audits if not audit.allowed for r in audit.reasons if "ok" not in r)
         self_model.authority_mode = authority.mode.value
         self_model.policy_enabled = authority.policy_enabled
         self_model.operator_connected = authority.operator_connected
         self_model.tick(arch.dt, sit.uncertainty, world.corrections)
-        predicted = self.system.future.predict_belief(world, candidate_from_intent(intent), steps=1)
+        predicted = self.system.future.predict_belief(
+            world, candidate_from_intent(intent), steps=1, max_speed=self.config.simulation.max_speed
+        )
         telemetry = CycleTelemetry(
             cycle_id=state.cycle_id + 1,
             physical_time=observations.timestamp,
@@ -227,6 +255,7 @@ class MinakanushiEngine:
                 "strategy_proposal": proposal.strategy_id,
                 "strategy_proposal_objective": proposal.objective,
                 "authority_block": str(intent.provenance).startswith("authority."),
+                "cem_refined": cem_refined,
             },
         )
         self.telemetry.emit(telemetry)

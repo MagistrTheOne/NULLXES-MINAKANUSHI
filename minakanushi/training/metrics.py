@@ -116,7 +116,10 @@ def count_hard_violations(candidate, trajectories, simulation) -> int:
     """Count HARD rule failures on (candidate, each predicted branch)."""
     from minakanushi.constraints.rule import ConstraintClass, RULE_REGISTRY
 
-    rules = tuple(RULE_REGISTRY[name]() for name in simulation.hard_constraints if name in RULE_REGISTRY)
+    unknown = [name for name in simulation.hard_constraints if name not in RULE_REGISTRY]
+    if unknown:
+        raise ValueError(f"unknown hard_constraints={unknown!r} expected={sorted(RULE_REGISTRY)!r}")
+    rules = tuple(RULE_REGISTRY[name]() for name in simulation.hard_constraints)
     checks = list(trajectories) if trajectories else [None]
     n = 0
     for traj in checks:

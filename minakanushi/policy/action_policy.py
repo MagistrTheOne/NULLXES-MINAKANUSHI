@@ -15,6 +15,11 @@ class ActionPolicy:
         trajectories: dict[str, list[FutureTrajectory]],
         goal_xy: tuple[float, float],
         now: float,
+        *,
+        max_speed: float | None = None,
+        w_risk: float = 0.5,
+        w_unc: float = 0.25,
+        w_speed: float = 1.0,
     ) -> ActionIntent:
         if allowed and not isinstance(allowed[0], AllowedStrategy):
             raise TypeError("ActionPolicy.select requires AllowedStrategy from ConstraintKernel, not raw StrategyCandidate")
@@ -33,7 +38,10 @@ class ActionPolicy:
         for item in allowed:
             branches = trajectories.get(item.strategy_id, [])
             traj = max(branches, key=lambda t: float(t.probability.detach())) if branches else None
-            value = evaluate_value(item.candidate, traj, goal_xy)
+            value = evaluate_value(
+                item.candidate, traj, goal_xy,
+                w_risk=w_risk, w_unc=w_unc, w_speed=w_speed, max_speed=max_speed,
+            )
             item.candidate.expected_value = value
             scored.append((value, item))
         scored.sort(key=lambda pair: pair[0], reverse=True)

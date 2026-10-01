@@ -42,6 +42,24 @@ class NpfConfig:
 class CognitionConfig:
     budget: int = 4
     convergence_threshold: float = 0.02
+    xy_weight: float = 1.0
+    vel_weight: float = 0.5
+
+
+@dataclass(frozen=True)
+class PlannerConfig:
+    enabled: bool = False
+    iters: int = 2
+    samples: int = 8
+    std: float = 0.5
+    seed: int = 7
+
+
+@dataclass(frozen=True)
+class MemoryFusionConfig:
+    latent_keep: float = 0.7
+    working_gain: float = 0.2
+    xy_gain: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -73,6 +91,8 @@ class ArchitectureConfig:
     dropout: float = 0.0
     npf: NpfConfig = field(default_factory=NpfConfig)
     cognition: CognitionConfig = field(default_factory=CognitionConfig)
+    planner: PlannerConfig = field(default_factory=PlannerConfig)
+    memory_fusion: MemoryFusionConfig = field(default_factory=MemoryFusionConfig)
     persistence: PersistenceConfig = field(default_factory=PersistenceConfig)
     prediction_horizons: HorizonConfig = field(default_factory=HorizonConfig)
     dt: float = 0.1
@@ -201,6 +221,18 @@ class SimulationConfig:
         "no_collide_obstacle",
         "max_speed",
     )
+    allow_empty_hard_constraints: bool = False
+
+    def validate_hard_constraints(self) -> None:
+        from minakanushi.constraints.rule import RULE_REGISTRY
+
+        unknown = [name for name in self.hard_constraints if name not in RULE_REGISTRY]
+        if unknown:
+            raise ValueError(
+                f"unknown hard_constraints={unknown!r} expected={sorted(RULE_REGISTRY)!r}"
+            )
+        if not self.hard_constraints and not self.allow_empty_hard_constraints:
+            raise ValueError("hard_constraints is empty and allow_empty_hard_constraints is false")
 
 
 @dataclass(frozen=True)
@@ -231,6 +263,8 @@ def load_architecture(path: str | Path) -> ArchitectureConfig:
     raw = _read_yaml(Path(path))
     npf_raw = raw.get("npf", {})
     cog_raw = raw.get("cognition", {})
+    planner_raw = raw.get("planner", {})
+    fusion_raw = raw.get("memory_fusion", {})
     per_raw = raw.get("persistence", {})
     hor_raw = raw.get("prediction_horizons", {})
     return ArchitectureConfig(
@@ -245,6 +279,8 @@ def load_architecture(path: str | Path) -> ArchitectureConfig:
         dropout=float(raw.get("dropout", 0.0)),
         npf=NpfConfig(**npf_raw) if npf_raw else NpfConfig(),
         cognition=CognitionConfig(**cog_raw) if cog_raw else CognitionConfig(),
+        planner=PlannerConfig(**planner_raw) if planner_raw else PlannerConfig(),
+        memory_fusion=MemoryFusionConfig(**fusion_raw) if fusion_raw else MemoryFusionConfig(),
         persistence=PersistenceConfig(**per_raw) if per_raw else PersistenceConfig(),
         prediction_horizons=HorizonConfig(**hor_raw) if hor_raw else HorizonConfig(),
         dt=float(raw.get("dt", 0.1)),
@@ -302,7 +338,7 @@ def load_simulation(path: str | Path) -> SimulationConfig:
         for z in raw.get("restricted_zones", [])
     )
     arena = tuple(float(v) for v in raw["arena"])
-    return SimulationConfig(
+    cfg = SimulationConfig(
         name=str(raw["name"]),
         dt=float(raw["dt"]),
         arena=(arena[0], arena[1], arena[2], arena[3]),
@@ -320,7 +356,10 @@ def load_simulation(path: str | Path) -> SimulationConfig:
         obstacles=tuple(raw.get("obstacles", ())),
         targets=tuple(raw.get("targets", ())),
         hard_constraints=tuple(raw.get("hard_constraints", ())),
+        allow_empty_hard_constraints=bool(raw.get("allow_empty_hard_constraints", False)),
     )
+    cfg.validate_hard_constraints()
+    return cfg
 
 
 def load_config(

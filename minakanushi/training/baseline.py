@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from minakanushi.training.checkpoint import MANIFEST_NAME, WEIGHTS_NAME
+from minakanushi.training.checkpoint import MANIFEST_NAME
 
 CHUNK = 1024 * 1024
 RESEARCH_LATENT = 4096
@@ -51,8 +51,11 @@ def inspect_mina(path: str | Path) -> dict[str, Any]:
     if manifest.get("architecture") != "MINAKANUSHI":
         raise ValueError("refusing non-MINAKANUSHI checkpoint")
     train = dict(manifest.get("train") or {})
-    sidecar = "weights/sidecar.pt" in names
-    weights = WEIGHTS_NAME in names
+    sidecar = "weights/sidecar.json" in names
+    index = "weights/tensors_index.json" in names
+    system_shards = [n for n in names if n.startswith("weights/system-") and n.endswith(".safetensors")]
+    optimizer = "weights/optimizer.safetensors" in names
+    weights = index and bool(system_shards)
     inventory = {
         "path": str(path),
         "bytes": int(path.stat().st_size),

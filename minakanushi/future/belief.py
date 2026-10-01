@@ -23,11 +23,20 @@ from minakanushi.strategy.candidate import StrategyCandidate
 from minakanushi.strategy.hold import is_hold
 
 
-def action_plant_velocity(strategy: StrategyCandidate, agent_xy: torch.Tensor, speed: float = 1.0) -> torch.Tensor:
+def action_plant_velocity(
+    strategy: StrategyCandidate,
+    agent_xy: torch.Tensor,
+    speed: float | None = None,
+    max_speed: float | None = None,
+) -> torch.Tensor:
     """Directed plant velocity for the agent slot. Holds are zero."""
     zeros = torch.zeros_like(agent_xy)
     if is_hold(strategy.objective):
         return zeros
+    if speed is None:
+        speed = float(strategy.parameters.get("speed", 1.0))
+    if max_speed is not None:
+        speed = min(max(float(speed), 0.0), float(max_speed))
     target = torch.tensor(strategy.target_xy, device=agent_xy.device, dtype=agent_xy.dtype).unsqueeze(0)
     delta = target - agent_xy
     norm = torch.linalg.vector_norm(delta, dim=-1, keepdim=True).clamp_min(1e-6)
@@ -40,13 +49,14 @@ def roll_belief(
     *,
     steps: int,
     dt: float,
+    max_speed: float | None = None,
 ) -> WorldState:
     """Kinematic future belief. Non-agent slots coast; only the agent takes the action."""
     if steps < 1:
         raise ValueError("steps must be >= 1")
     state = clone_world(world)
     agent_xy = state.entity_xy[:, AGENT_SLOT]
-    plant = action_plant_velocity(strategy, agent_xy)
+    plant = action_plant_velocity(strategy, agent_xy, max_speed=max_speed)
     occ = state.occupied.unsqueeze(-1).to(state.entity_xy.dtype)
     for _ in range(steps):
         vel = state.entity_vel.clone()

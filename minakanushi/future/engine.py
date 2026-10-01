@@ -45,14 +45,9 @@ class FutureEngine(nn.Module):
         world: WorldState,
         strategies: list[StrategyCandidate],
         max_horizon: int | None = None,
+        max_speed: float | None = None,
     ) -> list[FutureTrajectory]:
-        original = (
-            world.latent_state.data_ptr(),
-            world.entity_xy.data_ptr(),
-            world.entity_vel.data_ptr(),
-            world.occupied.data_ptr(),
-            world.uncertainty.data_ptr(),
-        )
+        before = _fingerprint(world)
         snapshot = clone_world(world)
         horizon = max_horizon or self.config.prediction_horizons.medium
         dt = self.config.dt
@@ -62,7 +57,7 @@ class FutureEngine(nn.Module):
         pooled = (snapshot.latent_state * occ).sum(dim=1) / occ.sum(dim=1).clamp_min(1.0)
 
         for strategy in strategies:
-            action_vec = self._action_vector(strategy, agent_xy)
+            action_vec = self._action_vector(strategy, agent_xy, max_speed=max_speed)
             logits = []
             uncs = []
             stacked_list = []
@@ -111,15 +106,7 @@ class FutureEngine(nn.Module):
                     )
                 )
 
-        after = (
-            world.latent_state.data_ptr(),
-            world.entity_xy.data_ptr(),
-            world.entity_vel.data_ptr(),
-            world.occupied.data_ptr(),
-            world.uncertainty.data_ptr(),
-        )
-        if after != original:
-            raise RuntimeError("FutureEngine mutated WorldState tensors; possibility leaked into reality")
+        _assert_unmutated(before, world, owner="FutureEngine.predict")
         return trajectories
 
     def predict_belief(
@@ -127,26 +114,20 @@ class FutureEngine(nn.Module):
         world: WorldState,
         strategy: StrategyCandidate,
         steps: int = 1,
+        max_speed: float | None = None,
     ) -> WorldState:
         """Belief(t)+Action → Belief(t+dt). Does not mutate world."""
-        original = (
-            world.latent_state.data_ptr(),
-            world.entity_xy.data_ptr(),
-            world.entity_vel.data_ptr(),
-            world.existence.data_ptr(),
-        )
-        predicted = roll_belief(world, strategy, steps=steps, dt=self.config.dt)
-        after = (
-            world.latent_state.data_ptr(),
-            world.entity_xy.data_ptr(),
-            world.entity_vel.data_ptr(),
-            world.existence.data_ptr(),
-        )
-        if after != original:
-            raise RuntimeError("predict_belief mutated current belief")
+        before = _fingerprint(world)
+        predicted = roll_belief(world, strategy, steps=steps, dt=self.config.dt, max_speed=max_speed)
+        _assert_unmutated(before, world, owner="FutureEngine.predict_belief")
         return predicted
 
-    def _action_vector(self, strategy: StrategyCandidate, agent_xy: Tensor) -> Tensor:
+    def _action_vector(
+        self,
+        strategy: StrategyCandidate,
+        agent_xy: Tensor,
+        max_speed: float | None = None,
+    ) -> Tensor:
         zeros = torch.zeros(agent_xy.shape[0], 4, device=agent_xy.device, dtype=agent_xy.dtype)
         if is_hold(strategy.objective):
             zeros[:, 3] = HOLD_MODE[strategy.objective]
@@ -155,9 +136,108 @@ class FutureEngine(nn.Module):
         delta = target - agent_xy
         norm = torch.linalg.vector_norm(delta, dim=-1, keepdim=True).clamp_min(1e-6)
         directed = (delta / norm)
-        zeros[:, :2] = directed
+        speed = float(strategy.parameters.get("speed", 1.0))
+        if max_speed is not None:
+            speed = min(max(speed, 0.0), float(max_speed))
+        zeros[:, :2] = directed * speed
         zeros[:, 2] = 1.0
         return zeros
+
+
+def _fingerprint(world: WorldState) -> tuple:
+    """(data_ptr, version, shape) per tensor.
+
+    data_ptr catches rebinding; _version catches in-place mutation;
+    comparing data_ptr alone catches neither in-place writes.
+    """
+    out = []
+    for tensor in (
+        world.latent_state,
+        world.entity_xy,
+        world.entity_vel,
+        world.occupied,
+        world.uncertainty,
+        world.existence,
+    ):
+        out.append((tensor.data_ptr(), tensor._version, tuple(tensor.shape)))
+    return tuple(out)
+
+
+def _assert_unmutated(before: tuple, world: WorldState, *, owner: str) -> None:
+    after = _fingerprint(world)
+    if after != before:
+        raise RuntimeError(f"{owner} mutated WorldState tensors; possibility leaked into reality")
+
+
+def cem_refine(
+        engine: FutureEngine,
+        world: WorldState,
+        seed: StrategyCandidate,
+        goal_xy: tuple[float, float],
+        *,
+        max_speed: float | None = None,
+        horizon: int | None = None,
+        iters: int = 2,
+        samples: int = 8,
+        std: float = 0.5,
+        rng_seed: int = 7,
+    ) -> tuple[StrategyCandidate, float]:
+        """CEM target refinement around a seed strategy.
+
+        Samples Gaussian targets, predicts each, scores with the same
+        evaluate_value the policy uses, keeps the elite mean. The refined
+        candidate must still pass the ConstraintKernel downstream — CEM
+        proposes, the kernel disposes. Deterministic given rng_seed.
+        """
+        from minakanushi.strategy.evaluator import evaluate_value
+
+        if iters < 1 or samples < 1:
+            raise ValueError("cem iters/samples must be >= 1")
+        gen = torch.Generator(device="cpu").manual_seed(int(rng_seed))
+        mean = torch.tensor([float(seed.target_xy[0]), float(seed.target_xy[1])], dtype=torch.float32)
+        best_cand = seed
+        best_val = float("-inf")
+        horizon = horizon if horizon is not None else engine.config.prediction_horizons.short
+        first = True
+        for _ in range(int(iters)):
+            pts = mean.unsqueeze(0) + float(std) * torch.randn(int(samples), 2, generator=gen)
+            cands = [
+                StrategyCandidate(
+                    f"{seed.strategy_id}_cem{j}",
+                    seed.objective,
+                    (float(p[0].item()), float(p[1].item())),
+                    expected_value=seed.expected_value,
+                    uncertainty=seed.uncertainty,
+                    predicted_risk=seed.predicted_risk,
+                    parameters=dict(seed.parameters),
+                )
+                for j, p in enumerate(pts)
+            ]
+            if first:
+                # Seed itself competes, so the result never regresses vs input.
+                cands.append(StrategyCandidate(
+                    f"{seed.strategy_id}_seed0", seed.objective, seed.target_xy,
+                    expected_value=seed.expected_value, uncertainty=seed.uncertainty,
+                    predicted_risk=seed.predicted_risk, parameters=dict(seed.parameters),
+                ))
+                first = False
+            trajs = engine.predict(world, cands, max_horizon=horizon, max_speed=max_speed)
+            by_id = group_by_strategy(trajs)
+            scored: list[tuple[float, StrategyCandidate]] = []
+            for cand in cands:
+                branches = by_id.get(cand.strategy_id, [])
+                traj = max(branches, key=lambda t: float(t.probability.detach())) if branches else None
+                value = evaluate_value(cand, traj, goal_xy, max_speed=max_speed)
+                scored.append((value, cand))
+                if value > best_val:
+                    best_val = value
+                    best_cand = cand
+            scored.sort(key=lambda pair: pair[0], reverse=True)
+            elite = scored[: max(1, len(scored) // 2)]
+            mean = torch.stack([
+                torch.tensor([c.target_xy[0], c.target_xy[1]], dtype=torch.float32) for _, c in elite
+            ]).mean(dim=0)
+        return best_cand, best_val
 
 
 def group_by_strategy(trajectories: list[FutureTrajectory]) -> dict[str, list[FutureTrajectory]]:

@@ -56,6 +56,32 @@ class SyntheticPlatform:
         return self.world.observe()
 
     def execute(self, intent: ActionIntent) -> ActionResult:
+        # Plant boundary re-check: no intent reaches the world without passing
+        # the hard constraint kernel, even on direct calls bypassing the engine.
+        from minakanushi.constraints.kernel import MinakanushiConstraintKernel
+        from minakanushi.identity.authority import candidate_from_intent
+
+        kernel = MinakanushiConstraintKernel(self.world.config)
+        _, rejected, _ = kernel.filter([candidate_from_intent(intent)], {})
+        if rejected:
+            hold = ActionIntent(
+                strategy_id="safe_hold",
+                objective="SAFE_HOLD",
+                target_state=(float(self.world.agent.xy[0]), float(self.world.agent.xy[1])),
+                parameters={"speed": 0.0},
+                confidence=1.0,
+                valid_until=float(self.world.t) + 1.0,
+                abort_conditions=("plant_boundary_kernel_reject",),
+                provenance="plant.boundary",
+            )
+            self.world.step(hold)
+            xy = self.world.agent.xy
+            return ActionResult(
+                applied=False,
+                objective=str(intent.objective),
+                agent_xy=(float(xy[0]), float(xy[1])),
+                timestamp=float(self.world.t),
+            )
         self.world.step(intent)
         xy = self.world.agent.xy
         return ActionResult(

@@ -56,7 +56,9 @@ class MinakanushiSystem(nn.Module):
             position_state=positioned,
             units=units,
         )
-        self.uncertainty(core.world_state, units)
+        # Single explicit commit point: uncertainty estimate lands on
+        # WorldState here, never inside UncertaintyEngine.
+        core.world_state.uncertainty = self.uncertainty(core.world_state, units).channels
         return positioned, core
 
     def parameter_report(self) -> dict[str, int]:

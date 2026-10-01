@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import math
+
 import torch
 from torch import Tensor, nn
 
@@ -17,6 +19,38 @@ from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.mina_unit import KIND_IDS, MinaUnit, SOURCE_TYPES
 from minakanushi.perception.telemetry import TelemetryEncoder
 from minakanushi.perception.vector import VectorEncoder
+
+
+def _finite_number(value: Any) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"non-finite perception value: {value!r}")
+    return number
+
+
+def _valid_vector_item(item: Any) -> bool:
+    """Drop corrupt vector items instead of poisoning WorldState."""
+    if not isinstance(item, dict):
+        return False
+    try:
+        eid = int(item["id"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if eid == 0:
+        return False
+    try:
+        xy = item["xy"]
+        x, y = _finite_number(xy[0]), _finite_number(xy[1])
+        vel = item.get("vel", (0.0, 0.0))
+        _finite_number(vel[0])
+        _finite_number(vel[1])
+        conf = float(item.get("confidence", 1.0))
+    except (KeyError, TypeError, ValueError, IndexError):
+        return False
+    if not math.isfinite(conf) or conf < 0.0 or conf > 1.0:
+        return False
+    str(item.get("kind", "unknown"))
+    return True
 
 
 @dataclass
@@ -45,42 +79,48 @@ class PerceptionBridge(nn.Module):
 
     def encode(self, observation: Observation, *, device: torch.device, dtype: torch.dtype) -> list[MinaUnit]:
         units: list[MinaUnit] = []
+        ax = _finite_number(observation.agent_xy[0])
+        ay = _finite_number(observation.agent_xy[1])
+        avx = _finite_number(observation.agent_vel[0])
+        avy = _finite_number(observation.agent_vel[1])
+        heading = _finite_number(observation.heading)
+        health = _finite_number(observation.health)
+        battery = _finite_number(observation.battery)
+        noise_std = float(observation.noise_std)
+        if not math.isfinite(noise_std) or noise_std < 0.0:
+            raise ValueError(f"invalid noise_std: {observation.noise_std!r}")
         tel = torch.tensor(
-            [
-                observation.agent_xy[0],
-                observation.agent_xy[1],
-                observation.agent_vel[0],
-                observation.agent_vel[1],
-                observation.heading,
-                observation.health,
-                observation.battery,
-            ],
+            [ax, ay, avx, avy, heading, health, battery],
             device=device,
             dtype=dtype,
         )
         arrival = observation.arrival_time if observation.arrival_time is not None else observation.timestamp
-        units.append(
-            MinaUnit(
-                source_type="telemetry",
-                source_id=1,
-                timestamp=float(observation.metadata.get("event_time", observation.timestamp)),
-                sequence_index=0,
-                spatial_frame="arena",
-                spatial_position=(observation.agent_xy[0], observation.agent_xy[1], 0.0),
-                spatial_valid=True,
-                semantic_embedding=self.telemetry(tel.unsqueeze(0)).squeeze(0),
-                confidence=0.98,
-                uncertainty=0.02,
-                persistence=1.0,
-                entity_reference=1,
-                relation_reference=0,
-                kind="agent",
-                arrival_time=arrival,
-                source_rate=observation.source_rate_telemetry,
-                metadata={"vel": observation.agent_vel},
-            )
+        _finite_number(arrival)
+        tel_unit = MinaUnit(
+            source_type="telemetry",
+            source_id=1,
+            timestamp=float(observation.metadata.get("event_time", observation.timestamp)),
+            sequence_index=0,
+            spatial_frame="arena",
+            spatial_position=(ax, ay, 0.0),
+            spatial_valid=True,
+            semantic_embedding=self.telemetry(tel.unsqueeze(0)).squeeze(0),
+            confidence=0.98,
+            uncertainty=0.02,
+            persistence=1.0,
+            entity_reference=1,
+            relation_reference=0,
+            kind="agent",
+            arrival_time=arrival,
+            source_rate=observation.source_rate_telemetry,
+            metadata={"vel": (avx, avy)},
         )
+        units.append(tel_unit)
+        dropped = 0
         for seq, item in enumerate(observation.visible, start=1):
+            if not _valid_vector_item(item):
+                dropped += 1
+                continue
             kind = str(item.get("kind", "unknown"))
             conf = float(item.get("confidence", 1.0))
             feat = torch.tensor(
@@ -120,6 +160,7 @@ class PerceptionBridge(nn.Module):
                     metadata={"occluded": "false", "vel": item.get("vel", (0.0, 0.0))},
                 )
             )
+        tel_unit.metadata["dropped_items"] = dropped
         return units
 
     def encode_feature_batch(self, features: Tensor, source: str) -> Tensor:

@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6.0",
     "pydantic>=2.0",
     "torch>=2.3",
+    "safetensors>=0.4",
 ]
 
 [project.optional-dependencies]

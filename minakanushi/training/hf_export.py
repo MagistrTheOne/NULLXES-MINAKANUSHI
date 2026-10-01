@@ -17,7 +17,7 @@ import torch
 import yaml
 from torch import Tensor
 
-from minakanushi.training.checkpoint import CONFIG_NAME, MANIFEST_NAME, WEIGHTS_NAME
+from minakanushi.training.checkpoint import CONFIG_NAME, MANIFEST_NAME
 from minakanushi.training.shard import tensor_nbytes
 
 FORBIDDEN_MODEL_TYPES = {"llama", "gemma", "qwen", "mistral", "gpt2", "gpt-neox", "gpt_neox"}
@@ -178,19 +178,22 @@ def _to_mirror_tensor(value: Tensor) -> Tensor:
 
 
 def _iter_system_shards(zf: zipfile.ZipFile) -> Iterator[dict[str, Any]]:
-    names = set(zf.namelist())
-    if WEIGHTS_NAME in names:
-        payload = torch.load(io.BytesIO(zf.read(WEIGHTS_NAME)), map_location="cpu", weights_only=False)
-        system = payload.get("system") if isinstance(payload, dict) else None
-        if not isinstance(system, dict):
-            raise ValueError("weights.pt has no system tensor map")
-        yield system
-        return
-    shard_names = sorted(n for n in names if n.startswith("weights/system-") and n.endswith(".pt"))
+    from minakanushi.training.mina_format import (
+        TENSORS_INDEX_NAME,
+        _SHARD_RE,
+        check_namelist,
+        load_safetensors_bytes,
+    )
+
+    names = zf.namelist()
+    check_namelist(names)
+    index = json.loads(zf.read(TENSORS_INDEX_NAME).decode("utf-8"))
+    weight_map = index.get("weight_map") or {}
+    shard_names = sorted({v for v in weight_map.values() if _SHARD_RE.match(v)})
     if not shard_names:
-        raise ValueError("checkpoint has neither weights.pt nor sharded system maps")
+        raise ValueError("tensors_index.json has no system shards")
     for name in shard_names:
-        shard = torch.load(io.BytesIO(zf.read(name)), map_location="cpu", weights_only=False)
+        shard = load_safetensors_bytes(zf.read(name))
         if not isinstance(shard, dict):
             raise ValueError(f"{name} is not a tensor map")
         yield shard

@@ -13,19 +13,47 @@ from minakanushi.architecture.config import ArchitectureConfig
 
 HUB_MODEL_TYPE = "minakanushi"
 RESEARCH_LATENT = 4096
+RESEARCH_PARAMS = 1_000_000_000
 
 MinakanushiHFConfig: type | None = None
 MinakanushiHubModel: type | None = None
 
 
-def refuse_if_research_scale(config: object) -> None:
-    """Hub class is a type tag. 6.8B is load_mina on H200/B300."""
+def _refuse(reason: str) -> None:
+    raise RuntimeError(
+        f"refusing to construct minakanushi_6_8b via AutoModel ({reason}). "
+        "Use load_mina on H200/B300. This Hub class is a type tag, not the runtime."
+    )
+
+
+def refuse_if_research_scale(config: object, total_params: int | None = None) -> None:
+    """Hub class is a type tag. 6.8B is load_mina on H200/B300.
+
+    Three independent gates (any one refuses):
+    1. declared parameter count >= 1B (closes the deep-but-narrow bypass);
+    2. frozen 6.8B profile dims (latent/depth/slots all match);
+    3. latent_dim >= 4096 (legacy width gate).
+    """
+    if total_params is not None and int(total_params) >= RESEARCH_PARAMS:
+        _refuse(f"parameters={int(total_params)}")
+    try:
+        from minakanushi.architecture.freeze import (
+            FROZEN_CORE_DEPTH,
+            FROZEN_MEMORY_SLOTS,
+            FROZEN_WORLD_SLOTS,
+        )
+
+        if (
+            int(getattr(config, "core_depth", -1) or -1) == FROZEN_CORE_DEPTH
+            and int(getattr(config, "world_slots", -1) or -1) == FROZEN_WORLD_SLOTS
+            and int(getattr(config, "memory_slots", -1) or -1) == FROZEN_MEMORY_SLOTS
+        ):
+            _refuse("frozen 6.8B scale dims")
+    except (ImportError, AttributeError, TypeError, ValueError):
+        pass
     latent = int(getattr(config, "latent_dim", 0) or 0)
     if latent >= RESEARCH_LATENT:
-        raise RuntimeError(
-            "refusing to construct minakanushi_6_8b via AutoModel. "
-            "Use load_mina on H200/B300. This Hub class is a type tag, not the runtime."
-        )
+        _refuse(f"latent_dim={latent}")
 
 
 def minakanushi_hf_config_dict(arch: ArchitectureConfig | None = None) -> dict:

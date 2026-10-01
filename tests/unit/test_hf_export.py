@@ -38,29 +38,33 @@ def _manifest() -> dict:
 
 
 def _write_mina(path: Path, *, sharded: bool) -> None:
+    from safetensors.torch import save as _sft_save
+
     system = {
         "weight": torch.randn(16, 32),
         "bias": torch.randn(16),
     }
-    optimizer = {"exp_avg": torch.ones(8)}
-    payload = {"system": system, "optimizer": optimizer, "runtime": None}
+    manifest = dict(_manifest())
+    manifest["checkpoint_format_version"] = 3
+    manifest["files"] = {}
     with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("manifest.yaml", yaml.safe_dump(_manifest(), sort_keys=False))
+        zf.writestr("manifest.yaml", yaml.safe_dump(manifest, sort_keys=False))
         zf.writestr("architecture.yaml", "profile_name: cpu_probe\n")
         if sharded:
-            buf = io.BytesIO()
-            torch.save({"weight": system["weight"]}, buf)
-            zf.writestr("weights/system-00000.pt", buf.getvalue())
-            buf = io.BytesIO()
-            torch.save({"bias": system["bias"]}, buf)
-            zf.writestr("weights/system-00001.pt", buf.getvalue())
-            buf = io.BytesIO()
-            torch.save({"optimizer": optimizer, "runtime": None}, buf)
-            zf.writestr("weights/sidecar.pt", buf.getvalue())
+            blobs = {
+                "weights/system-00000.safetensors": _sft_save({"weight": system["weight"]}),
+                "weights/system-00001.safetensors": _sft_save({"bias": system["bias"]}),
+            }
+            index = {"weight_map": {"weight": "weights/system-00000.safetensors",
+                                    "bias": "weights/system-00001.safetensors"}}
         else:
-            buf = io.BytesIO()
-            torch.save(payload, buf)
-            zf.writestr("weights.pt", buf.getvalue())
+            blobs = {"weights/system-00000.safetensors": _sft_save(system)}
+            index = {"weight_map": {"weight": "weights/system-00000.safetensors",
+                                    "bias": "weights/system-00000.safetensors"}}
+        for name, blob in blobs.items():
+            zf.writestr(name, blob)
+        zf.writestr("weights/tensors_index.json", json.dumps(index))
+        zf.writestr("weights/sidecar.json", json.dumps({"schema_version": 1}))
 
 
 def test_hf_config_is_not_llama() -> None:

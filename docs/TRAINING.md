@@ -55,12 +55,27 @@ constraints, closed-loop, physical integration) are specified but not yet
 active YAML. SelfModel / Authority implementation is Gate 04, structured
 state only — no identity network. See `docs/GATE_03_PRE_WORLD_MODEL.md`.
 
-## Checkpoint
+## Checkpoint (v3: SAFETENSORS-INSIDE / PICKLE-OUT)
 
-`*.mina` = zip(`manifest.yaml`, `weights.pt`, `identity.json`).
+`*.mina` = zip(`manifest.yaml`, `architecture.yaml`, `identity.json`,
+`weights/tensors_index.json`, `weights/system-*.safetensors`,
+`weights/optimizer.safetensors`?, `weights/runtime.safetensors`?,
+`weights/sidecar.json`).
+
+No `*.pt`, no `torch.save`/`torch.load`, no `weights_only=False` on the
+`.mina` path. Any legacy pickle entry, hash mismatch, unexpected file, or
+shape/dtype mismatch rejects BEFORE model mutation. Old `weights.pt`
+checkpoints are invalid (strict, no migrator).
 
 Manifest requires `architecture: MINAKANUSHI` and `organization: NULLXES`.
 Load fails on latent_dim mismatch instead of silent reshape.
+
+Hub role: `AutoConfig`/`AutoModel` is a type tag only
+(`minakanushi.hub`, never `AutoModelForCausalLM`); research scale
+(1B+ params, frozen 6.8B dims, or latent>=4096) refuses construct.
+Runtime load is always `load_mina`. The public safetensors mirror
+(`model-*.safetensors` + `model.safetensors.index.json`) is Hub vitrine,
+not the runtime; verify it with `scripts/test_hf_reload.py`.
 
 ## Metrics that count
 

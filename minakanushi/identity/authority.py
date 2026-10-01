@@ -75,6 +75,7 @@ class AuthorityModel:
         goal_xy: tuple[float, float],
         now: float,
         operator_intent: ActionIntent | None = None,
+        max_speed: float | None = None,
     ) -> ActionIntent:
         if self.mode == AuthorityMode.SAFE_HOLD or not self.policy_enabled or self.mode == AuthorityMode.MANUAL:
             return _hold(goal_xy, now, f"authority.{self.mode.value.lower()}.policy_off")
@@ -84,7 +85,7 @@ class AuthorityModel:
             if operator_intent is None:
                 return _hold(goal_xy, now, "authority.directed.missing_operator_intent")
             allowed_ids = {item.strategy_id for item in allowed}
-            if operator_intent.strategy_id not in allowed_ids and operator_intent.objective != "SAFE_HOLD":
+            if operator_intent.strategy_id not in allowed_ids:
                 return _hold(goal_xy, now, "authority.directed.kernel_rejected")
             return ActionIntent(
                 strategy_id=operator_intent.strategy_id,
@@ -96,8 +97,15 @@ class AuthorityModel:
                 abort_conditions=operator_intent.abort_conditions + ("hard_constraint_violation",),
                 provenance="authority.directed.operator",
             )
-        return policy.select(allowed, trajectories, goal_xy, now)
+        return policy.select(allowed, trajectories, goal_xy, now, max_speed=max_speed)
 
 
 def candidate_from_intent(intent: ActionIntent) -> StrategyCandidate:
-    return StrategyCandidate(intent.strategy_id, intent.objective, intent.target_state, 0.0, 0.0)
+    return StrategyCandidate(
+        intent.strategy_id,
+        intent.objective,
+        intent.target_state,
+        0.0,
+        0.0,
+        parameters=dict(intent.parameters),
+    )

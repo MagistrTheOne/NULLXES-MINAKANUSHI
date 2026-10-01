@@ -17,7 +17,7 @@ from minakanushi.architecture.config import ArchitectureConfig
 from minakanushi.architecture.mina_unit import MinaUnitBatch
 from minakanushi.architecture.outputs import CoreOutput, PositionState
 from minakanushi.core.cognitive_block import CognitiveBlock
-from minakanushi.core.convergence import slot_delta
+from minakanushi.core.convergence import cognition_delta, slot_delta
 from minakanushi.core.recurrent_state import clone_world
 from minakanushi.state.world import BELIEF_STD_MIN, WorldState
 from minakanushi.utils.tensors import assert_finite, assert_shape
@@ -34,6 +34,11 @@ class DynamicWorldCore(nn.Module):
         self.xy_residual = nn.Linear(dim, 2)
         self.memory_write = nn.Linear(dim, config.memory_dim)
         self.seed_head = nn.Linear(dim, dim)
+        # Learned memory gate: g = sigmoid(W[latent; mem]), latent' = norm(latent + g*mem).
+        # Replaces the fixed 0.1 additive injection so retrieval cannot
+        # silently dominate or vanish; the gate is trained end-to-end.
+        self.mem_gate = nn.Linear(dim * 2, dim)
+        self.mem_norm = nn.LayerNorm(dim)
         self._activation_checkpoint = False
         self._amp_dtype: torch.dtype | None = None
 
@@ -86,16 +91,25 @@ class DynamicWorldCore(nn.Module):
         state = clone_world(world_state)
         if memory_state is not None:
             assert_shape("memory_state", memory_state, tuple(state.latent_state.shape))
-            state.latent_state = state.latent_state + 0.1 * memory_state
+            gate = torch.sigmoid(self.mem_gate(torch.cat([state.latent_state, memory_state], dim=-1)))
+            state.latent_state = self.mem_norm(state.latent_state + gate * memory_state)
         cycles = 0
         last_delta = torch.ones(state.latent_state.shape[0], device=state.latent_state.device)
+        prev_xy = self.xy_residual(state.latent_state).detach()
+        prev_vel = self.vel_head(state.latent_state).detach()
         for _ in range(budget):
             previous = state.latent_state
             updated = previous
             for block in self.blocks:
                 updated = block(updated, fused_obs, state.occupied, units.mask)
-            last_delta = slot_delta(previous, updated, state.occupied)
+            cur_xy = self.xy_residual(updated)
+            cur_vel = self.vel_head(updated)
+            last_delta = cognition_delta(
+                previous, updated, prev_xy, cur_xy, prev_vel, cur_vel, state.occupied,
+                w_xy=self.config.cognition.xy_weight, w_vel=self.config.cognition.vel_weight,
+            )
             state.latent_state = updated
+            prev_xy, prev_vel = cur_xy.detach(), cur_vel.detach()
             cycles += 1
             if bool((last_delta < self.config.cognition.convergence_threshold).all()):
                 break

@@ -62,8 +62,8 @@ def counterfactual_candidate(truth, agent_xy: tuple[float, float], simulation) -
     action = str(truth.action)
     if action in HOLD_MODE:
         target = _move_target(simulation, agent_xy, truth.action_target)
-        return StrategyCandidate("move_to", "MOVE_TO", target, 0.0, 0.0)
-    return StrategyCandidate("wait", "WAIT", agent_xy, 0.0, 0.0)
+        return StrategyCandidate("move_to", "MOVE_TO", target, 0.0, 0.0, parameters={"speed": 1.0})
+    return StrategyCandidate("wait", "WAIT", agent_xy, 0.0, 0.0, parameters={"speed": 0.0})
 
 
 def _post_clip_norm(parameters) -> float:
@@ -475,13 +475,14 @@ class Trainer:
             mem_mask = aligned_occ_n
 
         agent_xy = tuple(float(x) for x in episode.observations[idx].agent_xy)
-        cand = StrategyCandidate(truth.action.lower(), truth.action, truth.action_target, 0.0, 0.0)
+        cand = StrategyCandidate(truth.action.lower(), truth.action, truth.action_target, 0.0, 0.0,
+                                 parameters={"speed": 0.0 if str(truth.action) in HOLD_MODE else 1.0})
         alt = counterfactual_candidate(truth, agent_xy, self.config.simulation)
         if cand.strategy_id == alt.strategy_id:
             raise RuntimeError(
                 f"counterfactual collapsed to labeled strategy {cand.strategy_id!r} action={truth.action!r}"
             )
-        trajs = self.system.future.predict(pred, [cand, alt], max_horizon=arch.prediction_horizons.short)
+        trajs = self.system.future.predict(pred, [cand, alt], max_horizon=arch.prediction_horizons.short, max_speed=self.config.simulation.max_speed)
         primary = [t for t in trajs if t.strategy_id == cand.strategy_id]
         other = [t for t in trajs if t.strategy_id == alt.strategy_id]
         pred_future = primary[0].states_xy.unsqueeze(0)
@@ -615,7 +616,8 @@ class Trainer:
         err_without = masked_mse(core_off.world_state.entity_xy, pkt.aligned_next, pkt.aligned_occ)
         memory_future = float((err_without - err_with).detach())
         trajs_off = self.system.future.predict(
-            core_off.world_state, pkt.candidates, max_horizon=self.config.architecture.prediction_horizons.short
+            core_off.world_state, pkt.candidates, max_horizon=self.config.architecture.prediction_horizons.short,
+            max_speed=self.config.simulation.max_speed,
         )
         primary_off = [t for t in trajs_off if t.strategy_id == pkt.candidates[0].strategy_id]
         pred_future_off = primary_off[0].states_xy.unsqueeze(0)

@@ -110,6 +110,15 @@ class MaxSpeed(ConstraintRule):
         speed = float(candidate.parameters.get("speed", 1.0))
         if speed > simulation.max_speed + 1e-6:
             return False, f"max_speed {speed} > {simulation.max_speed}"
+        if trajectory is not None:
+            agent = trajectory.states_xy[:, AGENT_SLOT]
+            pts = [(float(p[0].item()), float(p[1].item())) for p in agent]
+            peak = 0.0
+            for prev, nxt in zip(pts[:-1], pts[1:]):
+                step = ((nxt[0] - prev[0]) ** 2 + (nxt[1] - prev[1]) ** 2) ** 0.5
+                peak = max(peak, step / max(float(simulation.dt), 1e-9))
+            if peak > simulation.max_speed + 1e-6:
+                return False, f"max_speed trajectory peak {peak:.3f} > {simulation.max_speed}"
         return True, "max_speed ok"
 
 
