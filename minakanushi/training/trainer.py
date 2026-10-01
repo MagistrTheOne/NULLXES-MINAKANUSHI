@@ -741,9 +741,17 @@ class Trainer:
         abort_reason = None
         start = int(self.start_step)
         end = start + int(train.steps) - 1
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()  # diagnostic only; no training semantics
         for step in range(start, end + 1):
             log = self.step_once(step)
             logs.append(log)
+            if step == start and torch.cuda.is_available():
+                print(
+                    f"cuda_peak_allocated_GiB={torch.cuda.max_memory_allocated() / 1024**3:.3f} "
+                    f"cuda_peak_reserved_GiB={torch.cuda.max_memory_reserved() / 1024**3:.3f}",
+                    flush=True,
+                )
             if step % train.log_every == 0 or step == start:
                 if is_rank0():
                     print(
