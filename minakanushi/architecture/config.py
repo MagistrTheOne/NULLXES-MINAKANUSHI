@@ -137,6 +137,8 @@ class LossLambdaConfig:
     representation: float = 0.05
     belief: float = 0.0
     revision: float = 0.0
+    branch: float = 0.0
+    speed: float = 0.0
 
 
 @dataclass(frozen=True)

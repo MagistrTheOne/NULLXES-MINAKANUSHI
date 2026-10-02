@@ -87,7 +87,11 @@ def compute_objectives(
     causal_pred: Tensor,
     causal_true: Tensor,
     alt_future_xy: Tensor,
-    intra_branch_xy: Tensor,
+    intra_branch_xy: Tensor | None = None,
+    extra_branch_xy: Tensor | None = None,
+    speed_agent_xy: Tensor | None = None,
+    speed_dt: float | None = None,
+    speed_max: float | None = None,
     latent: Tensor,
     training: TrainingConfig,
     unobserved_mask: Tensor | None = None,
@@ -130,11 +134,6 @@ def compute_objectives(
     mem_w = memory_mask.to(memory_xy.dtype).unsqueeze(-1)
     l_memory = ((memory_xy - memory_true_xy).pow(2) * mem_w).sum() / mem_w.sum().clamp_min(1.0)
     l_causal = ((causal_pred - causal_true).pow(2) * mask).sum() / denom
-    l_action = counterfactual_separation(
-        pred_future_xy[:, -1], alt_future_xy[:, -1], training.regularizer.counterfactual_margin
-    ) + counterfactual_separation(
-        pred_future_xy[:, -1], intra_branch_xy[:, -1], training.regularizer.counterfactual_margin
-    )
     l_repr = isotropic_regularizer(latent, occupied)
     if xy_std is None:
         l_belief_nll = pred_xy.new_zeros(())
@@ -178,6 +177,36 @@ def compute_objectives(
             entity_id=entity_id,
         )
     lambdas = training.lambdas
+
+    l_action = counterfactual_separation(pred_future_xy[:, -1], alt_future_xy[:, -1], training.regularizer.counterfactual_margin)
+
+    # H5-v0: supervise every runtime-consumed primary branch while
+    # preserving branch 0 as the canonical future anchor.
+    if extra_branch_xy is None or extra_branch_xy.shape[1] == 0:
+        l_branch = l_future.new_zeros(())
+    else:
+        _branch_losses = []
+        for _k in range(extra_branch_xy.shape[1]):
+            _branch_xy = extra_branch_xy[:, _k]
+            _branch_loss = ((_branch_xy - true_future_xy).pow(2) * future_mask).sum() / future_mask.sum().clamp_min(1.0)
+            _branch_losses.append(_branch_loss)
+        l_branch = torch.stack(_branch_losses).mean()
+
+    # H5-v0 physical contract: exactly mirror MaxSpeed's rollout-to-rollout
+    # transitions. Deliberately DO NOT include current_world -> states_xy[0].
+    if (
+        speed_agent_xy is None
+        or speed_dt is None
+        or speed_max is None
+        or speed_agent_xy.shape[2] < 2
+    ):
+        l_speed = l_future.new_zeros(())
+    else:
+        _delta_xy = speed_agent_xy[:, :, 1:, :] - speed_agent_xy[:, :, :-1, :]
+        _speed = torch.linalg.vector_norm(_delta_xy, dim=-1) / float(speed_dt)
+        _speed_violation = torch.relu(_speed - float(speed_max))
+        l_speed = (_speed_violation * _speed_violation).mean()
+
     total = (
         lambdas.state * l_state
         + lambdas.temporal * l_temporal
@@ -189,6 +218,8 @@ def compute_objectives(
         + lambdas.representation * l_repr
         + lambdas.belief * l_belief
         + lambdas.revision * l_revision
+        + lambdas.branch * l_branch
+        + lambdas.speed * l_speed
     )
     return ObjectiveBreakdown(
         total=total,
@@ -203,6 +234,8 @@ def compute_objectives(
             "representation": l_repr,
             "belief": l_belief,
             "revision": l_revision,
+            "branch": l_branch,
+            "speed": l_speed,
             **rev_parts,
         },
     )

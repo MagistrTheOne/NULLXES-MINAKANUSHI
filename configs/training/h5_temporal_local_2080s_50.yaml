@@ -1,0 +1,33 @@
+stage: 2
+name: h5_temporal_local_2080s_50
+architecture: configs/architecture/cpu_dev.yaml
+simulation: configs/simulation/milestone1.yaml
+seed: 13
+steps: 50
+batch_size: 1
+sequence_length: 24
+learning_rate: 0.0003
+weight_decay: 0.0001
+grad_clip: 1.0
+log_every: 5
+eval_every: 10
+checkpoint_every: 50
+warmup_steps: 25
+precision: float32
+device: cuda
+parallelism: none
+activation_checkpoint: false
+lambdas:
+  state: 0.6
+  temporal: 1.0
+  future: 0.6
+  uncertainty: 0.3
+  causal: 0.3
+  memory: 0.2
+  action: 0.4
+  representation: 0.05
+  branch: 0.015
+  speed: 0.0025
+regularizer:
+  isotropic_weight: 0.05
+  counterfactual_margin: 0.35

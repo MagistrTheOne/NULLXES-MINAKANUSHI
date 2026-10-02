@@ -487,7 +487,22 @@ class Trainer:
         other = [t for t in trajs if t.strategy_id == alt.strategy_id]
         pred_future = primary[0].states_xy.unsqueeze(0)
         alt_future = other[0].states_xy.unsqueeze(0)
-        intra_b = primary[1].states_xy.unsqueeze(0) if len(primary) > 1 else alt_future
+        # H5-v0: branch diversity is no longer enforced by unbounded
+        # intra-primary terminal repulsion. All runtime-consumed branches
+        # instead receive trajectory supervision + the kernel-equivalent
+        # speed contract.
+        intra_b = None
+
+        extra_branch_xy = (
+            torch.stack([traj.states_xy for traj in primary[1:]], dim=0).unsqueeze(0)
+            if len(primary) > 1
+            else None
+        )
+
+        speed_agent_xy = torch.stack(
+            [traj.states_xy[:, 0] for traj in primary],
+            dim=0,
+        ).unsqueeze(0)
         h = pred_future.shape[1]
         true_future = aligned_next.unsqueeze(1).expand(-1, h, -1, -1).contiguous()
         for k in range(h):
@@ -515,6 +530,10 @@ class Trainer:
             causal_true=aligned_vel,
             alt_future_xy=alt_future,
             intra_branch_xy=intra_b,
+            extra_branch_xy=extra_branch_xy,
+            speed_agent_xy=speed_agent_xy,
+            speed_dt=float(self.config.architecture.dt),
+            speed_max=float(self.config.simulation.max_speed),
             latent=pred.latent_state,
             training=train,
             unobserved_mask=(pred.age_unobserved > 0) & pred.occupied,
@@ -871,7 +890,11 @@ def _diagnose_run(logs: list[TrainLog]) -> str | None:
         losses = [x.loss for x in window]
         if max(losses) - min(losses) < 1e-8:
             return "loss stays constant"
-        if last.loss > 50.0 * logs[0].loss + 1.0:
+        # Multiplicative explosion threshold is only meaningful for a
+        # positive baseline loss. Negative total objectives can be valid
+        # (for example, likelihood-style terms) and otherwise make the
+        # threshold negative, causing false-positive aborts.
+        if logs[0].loss > 0.0 and last.loss > 50.0 * logs[0].loss + 1.0:
             return "loss oscillates explosively"
         terms0 = logs[0].terms
         terms1 = last.terms
